@@ -13,7 +13,7 @@ build:
 setup:
 	brew install tmux
 	sh tools/mac_setup.sh
-	$(MAKE) download-models ← 当初はモデルファイルを本家のopenpilotからダウンロードしていたが、本家のopenpilotも普通にgitでモデルを管理している様なのでこちらでもそうする。
+	$(MAKE) download-models
 	bash -c "source .venv/bin/activate && scons --clean && git lfs pull && scons -u -j$$(nproc)"
 
 lint:
