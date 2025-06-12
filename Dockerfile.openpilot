@@ -10,4 +10,4 @@ WORKDIR ${OPENPILOT_PATH}
 
 COPY . ${OPENPILOT_PATH}/
 
-RUN scons --cache-readonly -j$(nproc)
+RUN scons --clean && scons -j$(nproc)
