@@ -1,7 +1,7 @@
 download-models:
 	@echo "Downloading model files from upstream..."
-	# curl -L "https://github.com/commaai/openpilot/raw/master/selfdrive/modeld/models/driving_policy.onnx" -o selfdrive/modeld/models/driving_policy.onnx
-	# curl -L "https://github.com/commaai/openpilot/raw/master/selfdrive/modeld/models/driving_vision.onnx" -o selfdrive/modeld/models/driving_vision.onnx
+	curl -L "https://github.com/commaai/openpilot/raw/master/selfdrive/modeld/models/driving_policy.onnx" -o selfdrive/modeld/models/driving_policy.onnx
+	curl -L "https://github.com/commaai/openpilot/raw/master/selfdrive/modeld/models/driving_vision.onnx" -o selfdrive/modeld/models/driving_vision.onnx
 	@echo "Model files downloaded successfully"
 
 clean:
@@ -13,7 +13,7 @@ build:
 setup:
 	brew install tmux
 	sh tools/mac_setup.sh
-# $(MAKE) download-models ← 当初はモデルファイルを本家のopenpilotからダウンロードしていたが、本家のopenpilotも普通にgitでモデルを管理している様なのでこちらでもそうする。
+	$(MAKE) download-models
 	bash -c "source .venv/bin/activate && scons --clean && git lfs pull && scons -u -j$$(nproc)"
 
 lint:

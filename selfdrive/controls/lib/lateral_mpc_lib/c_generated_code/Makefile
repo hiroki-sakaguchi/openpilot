@@ -79,8 +79,8 @@ OBJ+= $(OCP_OBJ)
 EXTERNAL_DIR=
 EXTERNAL_LIB=
 
-INCLUDE_PATH = /data/openpilot/third_party/acados/include
-LIB_PATH = /data/openpilot/third_party/acados/lib
+INCLUDE_PATH = /Users/hirokisakaguchi/Desktop/openpilot/third_party/acados/include
+LIB_PATH = /Users/hirokisakaguchi/Desktop/openpilot/third_party/acados/lib
 
 # preprocessor flags for make's implicit rules
 CPPFLAGS+= -I$(INCLUDE_PATH)
@@ -105,9 +105,9 @@ LDLIBS+= -lm
 LDLIBS+= 
 
 # libraries
-LIBACADOS_SOLVER=libacados_solver_lat.so
-LIBACADOS_OCP_SOLVER=libacados_ocp_solver_lat.so
-LIBACADOS_SIM_SOLVER=lib$(SIM_SRC:.c=.so)
+LIBACADOS_SOLVER=libacados_solver_lat.dylib
+LIBACADOS_OCP_SOLVER=libacados_ocp_solver_lat.dylib
+LIBACADOS_SIM_SOLVER=lib$(SIM_SRC:.c=.dylib)
 
 # virtual targets
 .PHONY : all clean
@@ -141,7 +141,7 @@ ocp_cython_c: ocp_shared_lib
 	-o acados_ocp_solver_pyx.c \
 	-I $(INCLUDE_PATH)/../interfaces/acados_template/acados_template \
 	$(INCLUDE_PATH)/../interfaces/acados_template/acados_template/acados_ocp_solver_pyx.pyx \
-	-I /data/openpilot/selfdrive/controls/lib/lateral_mpc_lib/c_generated_code \
+	-I /Users/hirokisakaguchi/Desktop/openpilot/selfdrive/controls/lib/lateral_mpc_lib/c_generated_code \
 
 ocp_cython_o: ocp_cython_c
 	$(CC) $(ACADOS_FLAGS) -c -O2 \
@@ -150,16 +150,16 @@ ocp_cython_o: ocp_cython_c
 	-I $(INCLUDE_PATH)/blasfeo/include/ \
 	-I $(INCLUDE_PATH)/hpipm/include/ \
 	-I $(INCLUDE_PATH) \
-	-I /usr/local/venv/lib/python3.12/site-packages/numpy/core/include \
-	-I /usr/include/python3.12 \
+	-I /Users/hirokisakaguchi/Desktop/openpilot/.venv/lib/python3.11/site-packages/numpy/core/include \
+	-I /opt/homebrew/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/include/python3.11 \
 	acados_ocp_solver_pyx.c \
 
 ocp_cython: ocp_cython_o
 	$(CC) $(ACADOS_FLAGS) -shared \
-	-o acados_ocp_solver_pyx.so \
+	-o acados_ocp_solver_pyx.dylib \
 	-Wl,-rpath=$(LIB_PATH) \
 	acados_ocp_solver_pyx.o \
-	$(abspath .)/libacados_ocp_solver_lat.so \
+	$(abspath .)/libacados_ocp_solver_lat.dylib \
 	$(LDFLAGS) $(LDLIBS)
 
 # Sim Cython targets
@@ -168,7 +168,7 @@ sim_cython_c: sim_shared_lib
 	-o acados_sim_solver_pyx.c \
 	-I $(INCLUDE_PATH)/../interfaces/acados_template/acados_template \
 	$(INCLUDE_PATH)/../interfaces/acados_template/acados_template/acados_sim_solver_pyx.pyx \
-	-I /data/openpilot/selfdrive/controls/lib/lateral_mpc_lib/c_generated_code \
+	-I /Users/hirokisakaguchi/Desktop/openpilot/selfdrive/controls/lib/lateral_mpc_lib/c_generated_code \
 
 sim_cython_o: sim_cython_c
 	$(CC) $(ACADOS_FLAGS) -c -O2 \
@@ -177,16 +177,16 @@ sim_cython_o: sim_cython_c
 	-I $(INCLUDE_PATH)/blasfeo/include/ \
 	-I $(INCLUDE_PATH)/hpipm/include/ \
 	-I $(INCLUDE_PATH) \
-	-I /usr/local/venv/lib/python3.12/site-packages/numpy/core/include \
-	-I /usr/include/python3.12 \
+	-I /Users/hirokisakaguchi/Desktop/openpilot/.venv/lib/python3.11/site-packages/numpy/core/include \
+	-I /opt/homebrew/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/include/python3.11 \
 	acados_sim_solver_pyx.c \
 
 sim_cython: sim_cython_o
 	$(CC) $(ACADOS_FLAGS) -shared \
-	-o acados_sim_solver_pyx.so \
+	-o acados_sim_solver_pyx.dylib \
 	-Wl,-rpath=$(LIB_PATH) \
 	acados_sim_solver_pyx.o \
-	$(abspath .)/libacados_sim_solver_lat.so \
+	$(abspath .)/libacados_sim_solver_lat.dylib \
 	$(LDFLAGS) $(LDLIBS)
 
 clean:
@@ -199,13 +199,13 @@ clean_ocp_shared_lib:
 	$(RM) $(OCP_OBJ)
 
 clean_ocp_cython:
-	$(RM) libacados_ocp_solver_lat.so
+	$(RM) libacados_ocp_solver_lat.dylib
 	$(RM) acados_solver_lat.o
-	$(RM) acados_ocp_solver_pyx.so
+	$(RM) acados_ocp_solver_pyx.dylib
 	$(RM) acados_ocp_solver_pyx.o
 
 clean_sim_cython:
-	$(RM) libacados_sim_solver_lat.so
+	$(RM) libacados_sim_solver_lat.dylib
 	$(RM) acados_sim_solver_lat.o
-	$(RM) acados_sim_solver_pyx.so
+	$(RM) acados_sim_solver_pyx.dylib
 	$(RM) acados_sim_solver_pyx.o
