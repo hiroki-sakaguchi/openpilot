@@ -16,6 +16,7 @@
 #include <QPainterPath>
 #include <QTextStream>
 #include <QtXml/QDomDocument>
+#include <QOperatingSystemVersion>
 
 #include "common/swaglog.h"
 #include "system/hardware/hw.h"
@@ -81,14 +82,24 @@ QString timeAgo(const QDateTime &date) {
 void setQtSurfaceFormat() {
   QSurfaceFormat fmt;
 #ifdef __APPLE__
-  fmt.setVersion(3, 2);
+  // Use more modern OpenGL version for better compatibility
+  fmt.setVersion(4, 1);  // OpenGL 4.1 is the last fully supported version on macOS
   fmt.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
   fmt.setRenderableType(QSurfaceFormat::OpenGL);
+
+  // Enable VSync to prevent tearing
+  fmt.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
+  fmt.setSwapInterval(1);  // VSync on
+
+  // Reduce MSAA samples for better performance on integrated GPUs
+  fmt.setSamples(4);  // Reduced from 16 to 4
+  fmt.setDepthBufferSize(24);
+  fmt.setStencilBufferSize(8);
 #else
   fmt.setRenderableType(QSurfaceFormat::OpenGLES);
-#endif
   fmt.setSamples(16);
   fmt.setStencilBufferSize(1);
+#endif
   QSurfaceFormat::setDefaultFormat(fmt);
 }
 
@@ -107,11 +118,16 @@ void initApp(int argc, char *argv[], bool disable_hidpi) {
 
   QString app_dir;
 #ifdef __APPLE__
-  // Get the devicePixelRatio, and scale accordingly to maintain 1:1 rendering
-  QApplication tmp(argc, argv);
+  // Let Qt handle HiDPI scaling automatically
+  QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+  QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+
+  // Don't create temporary QApplication
   app_dir = QCoreApplication::applicationDirPath();
-  if (disable_hidpi) {
-    qputenv("QT_SCALE_FACTOR", QString::number(1.0 / tmp.devicePixelRatio()).toLocal8Bit());
+
+  // Use native rendering on newer macOS versions
+  if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSBigSur) {
+    qputenv("QSG_RENDER_LOOP", "basic");
   }
 #else
   app_dir = QFileInfo(util::readlink("/proc/self/exe").c_str()).path();
