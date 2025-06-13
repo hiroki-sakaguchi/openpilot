@@ -41,10 +41,9 @@ start:
 	bash -c "source .venv/bin/activate && ./launch_openpilot.sh"
 
 build-comma:
-	docker build -t op-base-aarch64 -f Dockerfile.openpilot_base .
-	docker build -t openpilot-build -f Dockerfile.openpilot .
-	docker run --rm -v $(PWD):/workspace openpilot-build \
-	  bash -c "cd /workspace && scons --clean && scons -j\$$(nproc)"
+	@echo "Building openpilot using official docker_build.sh script..."
+	selfdrive/test/docker_build.sh base
+	selfdrive/test/docker_build.sh prebuilt
 
 release:
 	$(MAKE) clean
