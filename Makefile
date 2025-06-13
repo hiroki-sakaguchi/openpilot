@@ -45,3 +45,6 @@ build-comma:
 	docker build -t openpilot-build -f Dockerfile.openpilot .
 	docker run --rm -v $(PWD):/workspace openpilot-build \
 	  bash -c "cd /workspace && scons --clean && scons -j\$$(nproc)"
+
+release:
+	$(MAKE) clean
