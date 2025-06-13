@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <QDebug>
+#include <QTimer>
 
 #include "common/watchdog.h"
 #include "common/util.h"
@@ -13,6 +14,7 @@
 #include "selfdrive/ui/qt/qt_window.h"
 #include "selfdrive/ui/qt/widgets/prime.h"
 #include "selfdrive/ui/qt/widgets/scrollview.h"
+#include "selfdrive/ui/qt/widgets/input.h"
 #include "selfdrive/ui/qt/offroad/developer_panel.h"
 #include "selfdrive/ui/qt/offroad/firehose.h"
 
@@ -64,10 +66,10 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   };
 
 
-  std::vector<QString> longi_button_texts{tr("Aggressive"), tr("Standard"), tr("Relaxed")};
+  std::vector<QString> longi_button_texts{tr("Aggressive"), tr("Standard"), tr("Relaxed"), tr("Custom")};
   long_personality_setting = new ButtonParamControl("LongitudinalPersonality", tr("Driving Personality"),
                                           tr("Standard is recommended. In aggressive mode, openpilot will follow lead cars closer and be more aggressive with the gas and brake. "
-                                             "In relaxed mode openpilot will stay further away from lead cars. On supported cars, you can cycle through these personalities with "
+                                             "In relaxed mode openpilot will stay further away from lead cars. Custom mode allows you to set your own parameters. On supported cars, you can cycle through these personalities with "
                                              "your steering wheel distance button."),
                                           "../assets/offroad/icon_speed_limit.png",
                                           longi_button_texts);
@@ -87,12 +89,83 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
     // insert longitudinal personality after NDOG toggle
     if (param == "DisengageOnAccelerator") {
       addItem(long_personality_setting);
+      
+      // Add custom personality parameter controls
+      custom_follow_distance = new ButtonControl(tr("Custom Follow Distance"), tr("SET"));
+      custom_follow_distance->setVisible(false);
+      QObject::connect(custom_follow_distance, &ButtonControl::clicked, [=]() {
+        QString current = QString::fromStdString(params.get("CustomFollowDistance"));
+        if (current.isEmpty()) current = "1.75";
+        bool ok;
+        double value = current.toDouble(&ok);
+        if (!ok) value = 1.75;
+        
+        QString text = InputDialog::getText(tr("Enter follow distance in seconds (0.8-3.0):"), this, 
+                                          QString("Current: %1s").arg(value), false, 1, current);
+        if (!text.isEmpty()) {
+          double newValue = text.toDouble(&ok);
+          if (ok && newValue >= 0.8 && newValue <= 3.0) {
+            params.put("CustomFollowDistance", text.toStdString());
+          }
+        }
+      });
+      addItem(custom_follow_distance);
+      
+      custom_jerk_factor = new ButtonControl(tr("Custom Jerk Factor"), tr("SET"));
+      custom_jerk_factor->setVisible(false);
+      QObject::connect(custom_jerk_factor, &ButtonControl::clicked, [=]() {
+        QString current = QString::fromStdString(params.get("CustomJerkFactor"));
+        if (current.isEmpty()) current = "1.0";
+        bool ok;
+        double value = current.toDouble(&ok);
+        if (!ok) value = 1.0;
+        
+        QString text = InputDialog::getText(tr("Enter jerk factor (0.3-2.0):"), this,
+                                          QString("Current: %1").arg(value), false, 1, current);
+        if (!text.isEmpty()) {
+          double newValue = text.toDouble(&ok);
+          if (ok && newValue >= 0.3 && newValue <= 2.0) {
+            params.put("CustomJerkFactor", text.toStdString());
+          }
+        }
+      });
+      addItem(custom_jerk_factor);
+      
+      custom_stop_distance = new ButtonControl(tr("Custom Stop Distance"), tr("SET"));
+      custom_stop_distance->setVisible(false);
+      QObject::connect(custom_stop_distance, &ButtonControl::clicked, [=]() {
+        QString current = QString::fromStdString(params.get("CustomStopDistance"));
+        if (current.isEmpty()) current = "6.0";
+        bool ok;
+        double value = current.toDouble(&ok);
+        if (!ok) value = 6.0;
+        
+        QString text = InputDialog::getText(tr("Enter stop distance in meters (2.0-15.0):"), this,
+                                          QString("Current: %1m").arg(value), false, 1, current);
+        if (!text.isEmpty()) {
+          double newValue = text.toDouble(&ok);
+          if (ok && newValue >= 2.0 && newValue <= 15.0) {
+            params.put("CustomStopDistance", text.toStdString());
+          }
+        }
+      });
+      addItem(custom_stop_distance);
+      
+      // Connect personality setting change to show/hide custom controls
+      // Use a timer to periodically check for personality changes since ButtonParamControl doesn't expose signals
+      QTimer *timer = new QTimer(this);
+      QObject::connect(timer, &QTimer::timeout, this, &TogglesPanel::updateCustomVisibility);
+      timer->start(500); // Check every 500ms
     }
   }
 
   // Toggles with confirmation dialogs
   toggles["ExperimentalMode"]->setActiveIcon("../assets/img_experimental.svg");
   toggles["ExperimentalMode"]->setConfirmation(true, true);
+  
+  // Initialize custom parameter visibility
+  qDebug() << "TogglesPanel constructor: Initializing custom visibility";
+  updateCustomVisibility();
 }
 
 void TogglesPanel::updateState(const UIState &s) {
@@ -102,8 +175,50 @@ void TogglesPanel::updateState(const UIState &s) {
     auto personality = sm["selfdriveState"].getSelfdriveState().getPersonality();
     if (personality != s.scene.personality && s.scene.started && isVisible()) {
       long_personality_setting->setCheckedButton(static_cast<int>(personality));
+      updateCustomVisibility(); // Update custom controls visibility when personality changes
     }
     uiState()->scene.personality = personality;
+  }
+  
+  // Always check for personality parameter changes (even when not started)
+  static int last_personality = -1;
+  int current_personality = atoi(params.get("LongitudinalPersonality").c_str());
+  if (current_personality != last_personality) {
+    last_personality = current_personality;
+    updateCustomVisibility();
+  }
+}
+
+void TogglesPanel::updateCustomVisibility() {
+  // Show custom parameter controls only when Custom personality is selected
+  std::string personality_str = params.get("LongitudinalPersonality");
+  int personality = personality_str.empty() ? 1 : atoi(personality_str.c_str()); // Default to standard if empty
+  bool show_custom = (personality == 3); // 3 = custom
+  
+  qDebug() << "UpdateCustomVisibility: personality_str =" << QString::fromStdString(personality_str) 
+           << ", personality =" << personality << ", show_custom =" << show_custom;
+  
+  if (custom_follow_distance && custom_jerk_factor && custom_stop_distance) {
+    custom_follow_distance->setVisible(show_custom);
+    custom_jerk_factor->setVisible(show_custom);
+    custom_stop_distance->setVisible(show_custom);
+    
+    qDebug() << "Custom controls visibility updated to:" << show_custom;
+  } else {
+    qDebug() << "Custom controls not initialized!";
+  }
+  
+  // Initialize default values if not set
+  if (show_custom) {
+    if (params.get("CustomFollowDistance").empty()) {
+      params.put("CustomFollowDistance", "1.75");
+    }
+    if (params.get("CustomJerkFactor").empty()) {
+      params.put("CustomJerkFactor", "1.0");
+    }
+    if (params.get("CustomStopDistance").empty()) {
+      params.put("CustomStopDistance", "6.0");
+    }
   }
 }
 
@@ -113,6 +228,7 @@ void TogglesPanel::expandToggleDescription(const QString &param) {
 
 void TogglesPanel::showEvent(QShowEvent *event) {
   updateToggles();
+  updateCustomVisibility(); // Update custom controls when panel is shown
 }
 
 void TogglesPanel::updateToggles() {

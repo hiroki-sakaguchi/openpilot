@@ -68,11 +68,15 @@ public slots:
 
 private slots:
   void updateState(const UIState &s);
+  void updateCustomVisibility();
 
 private:
   Params params;
   std::map<std::string, ParamControl*> toggles;
   ButtonParamControl *long_personality_setting;
+  ButtonControl *custom_follow_distance;
+  ButtonControl *custom_jerk_factor;
+  ButtonControl *custom_stop_distance;
 
   void updateToggles();
 };

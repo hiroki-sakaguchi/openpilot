@@ -135,6 +135,7 @@ enum LongitudinalPersonality {
   aggressive @0;
   standard @1;
   relaxed @2;
+  custom @3;
 }
 
 struct InitData {

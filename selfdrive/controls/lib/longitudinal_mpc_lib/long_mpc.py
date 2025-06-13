@@ -6,6 +6,7 @@ from cereal import log
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.params import Params
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
@@ -58,6 +59,32 @@ STOP_DISTANCE = 6.0
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
 
+def get_custom_param(param_name, default_value):
+  """Get custom parameter value from Params with safety validation"""
+  try:
+    params = Params()
+    value_str = params.get(param_name, encoding='utf-8')
+    if not value_str:
+      return default_value
+    
+    value = float(value_str)
+    
+    # Safety validation ranges
+    if param_name == "CustomFollowDistance":
+      # Follow distance: 0.8s to 3.0s (safety range)
+      return max(0.8, min(3.0, value))
+    elif param_name == "CustomJerkFactor":
+      # Jerk factor: 0.3 to 2.0 (safety range)
+      return max(0.3, min(2.0, value))
+    elif param_name == "CustomStopDistance":
+      # Stop distance: 2.0m to 15.0m (safety range)
+      return max(2.0, min(15.0, value))
+    
+    return value
+  except:
+    cloudlog.warning(f"Failed to parse custom parameter {param_name}, using default {default_value}")
+    return default_value
+
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
     return 1.0
@@ -65,6 +92,8 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
     return 1.0
   elif personality==log.LongitudinalPersonality.aggressive:
     return 0.5
+  elif personality==log.LongitudinalPersonality.custom:
+    return get_custom_param("CustomJerkFactor", 1.0)  # Default to relaxed
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -76,19 +105,28 @@ def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
     return 1.45
   elif personality==log.LongitudinalPersonality.aggressive:
     return 1.25
+  elif personality==log.LongitudinalPersonality.custom:
+    return get_custom_param("CustomFollowDistance", 1.75)  # Default to relaxed
   else:
     raise NotImplementedError("Longitudinal personality not supported")
+
+def get_stop_distance(personality=log.LongitudinalPersonality.standard):
+  if personality==log.LongitudinalPersonality.custom:
+    return get_custom_param("CustomStopDistance", 6.0)  # Default to relaxed
+  else:
+    return STOP_DISTANCE
 
 def get_stopped_equivalence_factor(v_lead):
   return (v_lead**2) / (2 * COMFORT_BRAKE)
 
-def get_safe_obstacle_distance(v_ego, t_follow):
-  return (v_ego**2) / (2 * COMFORT_BRAKE) + t_follow * v_ego + STOP_DISTANCE
+def get_safe_obstacle_distance(v_ego, t_follow, personality=log.LongitudinalPersonality.standard):
+  stop_distance = get_stop_distance(personality)
+  return (v_ego**2) / (2 * COMFORT_BRAKE) + t_follow * v_ego + stop_distance
 
-def desired_follow_distance(v_ego, v_lead, t_follow=None):
+def desired_follow_distance(v_ego, v_lead, t_follow=None, personality=log.LongitudinalPersonality.standard):
   if t_follow is None:
-    t_follow = get_T_FOLLOW()
-  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead)
+    t_follow = get_T_FOLLOW(personality)
+  return get_safe_obstacle_distance(v_ego, t_follow, personality) - get_stopped_equivalence_factor(v_lead)
 
 
 def gen_long_model():
@@ -356,7 +394,7 @@ class LongitudinalMpc:
       v_cruise_clipped = np.clip(v_cruise * np.ones(N+1),
                                  v_lower,
                                  v_upper)
-      cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow)
+      cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow, personality)
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
@@ -402,9 +440,9 @@ class LongitudinalMpc:
     # Check if it got within lead comfort range
     # TODO This should be done cleaner
     if self.mode == 'blended':
-      if any((lead_0_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow))- self.x_sol[:,0] < 0.0):
+      if any((lead_0_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow, personality))- self.x_sol[:,0] < 0.0):
         self.source = 'lead0'
-      if any((lead_1_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow))- self.x_sol[:,0] < 0.0) and \
+      if any((lead_1_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow, personality))- self.x_sol[:,0] < 0.0) and \
          (lead_1_obstacle[0] - lead_0_obstacle[0]):
         self.source = 'lead1'
 
