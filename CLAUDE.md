@@ -128,7 +128,7 @@ chmod +x selfdrive/modeld/models/commonmodel_pyx.so
 make build-comma
 ```
 
-**結果**: 
+**結果**:
 - ビルドが正常に完了
 - モデルファイルが保持される
 - エラーが解消
@@ -202,6 +202,8 @@ Fix model build issues by making pickle files static
 
 ---
 
-**作成日**: 2025年6月15日  
-**対象バージョン**: openpilot release3 (v0.9.8)  
+**作成日**: 2025年6月15日
+**対象バージョン**: openpilot release3 (v0.9.8)
 **解決者**: Claude Code
+
+openpilot release3 (v0.9.8) 公式ではgit lfs方式が廃止になっておりモデルを含む全てのファイルをgithubのみで管理しており通常のgit lfsコマンドは使わずgit pullコマンドで全てのファイルがダウンロードされる。
