@@ -13,8 +13,8 @@ build:
 setup:
 	brew install tmux
 	sh tools/mac_setup.sh
-	$(MAKE) download-models
 	bash -c "source .venv/bin/activate && scons --clean && git lfs pull && scons -u -j$$(nproc)"
+#	$(MAKE) download-models
 
 lint:
 	bash -c "source .venv/bin/activate && scripts/lint/lint.sh"
