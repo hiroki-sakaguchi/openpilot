@@ -30,6 +30,7 @@ a.out
 *.os
 *.os-*
 *.so
+!selfdrive/modeld/models/commonmodel_pyx.so
 *.a
 *.clb
 *.class
@@ -37,6 +38,7 @@ a.out
 *.vcd
 *.qm
 *_pyx.cpp
+!selfdrive/modeld/models/commonmodel_pyx.cpp
 config.json
 clcache
 compile_commands.json
@@ -74,7 +76,7 @@ comma*.sh
 
 selfdrive/modeld/thneed/compile
 selfdrive/modeld/models/*.thneed
-selfdrive/modeld/models/*.pkl
+# selfdrive/modeld/models/*.pkl  # Disabled: using static pkl files
 
 *.bz2
 *.zst
