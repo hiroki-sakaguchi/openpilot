@@ -138,7 +138,15 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       auto_toggle->setVisible(exp_on_init);
 
       // update visibility live when ExperimentalMode toggles
-      QObject::connect(toggle, &ToggleControl::toggleFlipped, auto_toggle, &QWidget::setVisible);
+      QObject::connect(toggle, &ToggleControl::toggleFlipped, [auto_toggle](bool enabled){
+        auto_toggle->setVisible(enabled);
+        if (!enabled) {
+          // turn off AutoExperimentalMode if ExperimentalMode is turned off
+          Params p;
+          p.putBool("AutoExperimentalMode", false);
+          auto_toggle->refresh();
+        }
+      });
 
       addItem(auto_toggle);
       toggles["AutoExperimentalMode"] = auto_toggle;
