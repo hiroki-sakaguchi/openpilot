@@ -255,6 +255,10 @@ def gen_long_ocp():
 
 class LongitudinalMpc:
   def __init__(self, mode='acc', dt=DT_MDL):
+    # Params instance for dynamic StopDistance updates
+    self._params = Params()
+    self.stop_distance = STOP_DISTANCE  # current runtime value
+    self._last_sd_check_t = 0.0  # timestamp for throttling DB reads
     self.mode = mode
     self.dt = dt
 
@@ -373,6 +377,9 @@ class LongitudinalMpc:
     return lead_xv
 
   def update(self, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
+    # Refresh StopDistance from Params at most once per second
+    self._refresh_stop_distance()
+
     t_follow = get_T_FOLLOW(personality)
     v_ego = self.x0[1]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -436,7 +443,7 @@ class LongitudinalMpc:
     self.params[:,2] = np.min(x_obstacles, axis=1)
     self.params[:,3] = np.copy(self.prev_a)
     self.params[:,4] = t_follow
-    self.params[:,6] = STOP_DISTANCE  # runtime stop distance
+    self.params[:,6] = STOP_DISTANCE  # runtime stop distance (updated by _refresh_stop_distance)
 
     self.run()
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
@@ -483,6 +490,34 @@ class LongitudinalMpc:
         self.last_cloudlog_t = t
         cloudlog.warning(f"Long mpc reset, solution_status: {self.solution_status}")
       self.reset()
+
+  # -------- Dynamic StopDistance handling --------
+  def _refresh_stop_distance(self):
+    """Poll Params.StopDistance and update global/local values without requiring restart."""
+    t_now = time.monotonic()
+    if (t_now - self._last_sd_check_t) < 1.0:  # throttle to 1 Hz
+      return
+    self._last_sd_check_t = t_now
+
+    sd_param = self._params.get("StopDistance")
+    if sd_param is None:
+      return
+
+    try:
+      idx = int(sd_param)
+      new_sd = 6.0 + (idx * 2.0)
+    except (ValueError, TypeError):
+      new_sd = 6.0
+
+    global STOP_DISTANCE
+    if abs(new_sd - STOP_DISTANCE) > 1e-3:
+      STOP_DISTANCE = new_sd
+      self.stop_distance = new_sd
+      try:
+        # Export the runtime-effective index so UI can confirm
+        self._params.put_nonblocking("StopDistanceRuntime", str(int((STOP_DISTANCE - 6.0) / 2.0)))
+      except Exception:
+        pass
 
 
 if __name__ == "__main__":
