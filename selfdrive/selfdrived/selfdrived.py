@@ -22,6 +22,7 @@ from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroa
 from openpilot.selfdrive.controls.lib.latcontrol import MIN_LATERAL_CONTROL_SPEED
 
 from openpilot.system.version import get_build_metadata
+from openpilot.common.conversions import Conversions as CV
 
 REPLAY = "REPLAY" in os.environ
 SIMULATION = "SIMULATION" in os.environ
@@ -130,6 +131,11 @@ class SelfdriveD:
       set_offroad_alert("Offroad_CarUnrecognized", True)
     elif self.CP.passive:
       self.events.add(EventName.dashcamMode, static=True)
+
+    # --- Auto Experimental mode ---
+    self.auto_exp_enabled = self.params.get_bool("AutoExperimentalMode")
+    self.auto_exp_active = False  # whether currently in auto experimental
+    self.auto_exp_latch = False   # set after gas press until conditions reset
 
   def update_events(self, CS):
     """Compute onroadEvents from carState"""
@@ -458,6 +464,37 @@ class SelfdriveD:
   def step(self):
     CS = self.data_sample()
     self.update_events(CS)
+
+    # ----- Dynamic Experimental Mode logic -----
+    if self.auto_exp_enabled and self.params.get_bool("ExperimentalMode"):
+      # latest planner/throttle data
+      allow_throttle = self.sm['longitudinalPlan'].allowThrottle if self.sm.updated('longitudinalPlan') else True
+      v_ego = self.sm['carState'].vEgo
+
+      cond = (not allow_throttle) and (v_ego <= 55 * CV.KPH_TO_MS)
+
+      # Rising edge of gas pedal => disable + latch
+      if self.auto_exp_active and CS.gasPressed and not self.CS_prev.gasPressed:
+        self.auto_exp_active = False
+        self.auto_exp_latch = True
+
+      # Clear latch when condition no longer true
+      if not cond:
+        self.auto_exp_latch = False
+
+      # Activate when condition satisfied and not latched
+      if cond and not self.auto_exp_latch:
+        self.auto_exp_active = True
+      elif not cond:
+        self.auto_exp_active = False
+
+      # Override outgoing flag
+      self.experimental_mode = self.auto_exp_active
+
+    # normal experimental mode when auto disabled
+    elif not self.auto_exp_enabled:
+      self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
+
     if not self.CP.passive and self.initialized:
       self.enabled, self.active = self.state_machine.update(self.events)
     self.update_alerts(CS)
@@ -476,6 +513,8 @@ class SelfdriveD:
     while not evt.is_set():
       self.is_metric = self.params.get_bool("IsMetric")
       self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
+      # refresh auto-exp param every 100 ms
+      self.auto_exp_enabled = self.params.get_bool("AutoExperimentalMode")
       self.personality = self.read_personality_param()
       time.sleep(0.1)
 

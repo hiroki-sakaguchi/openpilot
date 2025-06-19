@@ -61,6 +61,12 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       tr("Display speed in km/h instead of mph."),
       "../assets/offroad/icon_metric.png",
     },
+    {
+      "AutoExperimentalMode",
+      tr("Auto Experimental Mode"),
+      tr("Enable experimental mode automatically when speed is ≤ 55 km/h and openpilot is coasting."),
+      "../assets/img_experimental_white.svg",
+    },
   };
 
 
@@ -132,6 +138,8 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   // Toggles with confirmation dialogs
   toggles["ExperimentalMode"]->setActiveIcon("../assets/img_experimental.svg");
   toggles["ExperimentalMode"]->setConfirmation(true, true);
+
+  // AutoExperimentalMode toggle visibility will be updated in updateToggles()
 }
 
 void TogglesPanel::updateState(const UIState &s) {
@@ -202,8 +210,20 @@ void TogglesPanel::updateToggles() {
     }
 
     experimental_mode_toggle->refresh();
+
+    // Update visibility of AutoExperimentalMode toggle depending on ExperimentalMode state
+    auto auto_exp_toggle_it = toggles.find("AutoExperimentalMode");
+    if (auto_exp_toggle_it != toggles.end()) {
+      bool exp_on = params.getBool("ExperimentalMode");
+      auto_exp_toggle_it->second->setVisible(exp_on);
+    }
   } else {
     experimental_mode_toggle->setDescription(e2e_description);
+    auto auto_exp_toggle_it = toggles.find("AutoExperimentalMode");
+    if (auto_exp_toggle_it != toggles.end()) {
+      bool exp_on = params.getBool("ExperimentalMode");
+      auto_exp_toggle_it->second->setVisible(exp_on);
+    }
   }
 }
 
