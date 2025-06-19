@@ -34,7 +34,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
   && rm -rf /var/lib/apt/lists/*
 
+# Skip Intel OpenCL installation on ARM64 architecture
+# RUN if [ "$(uname -m)" = "x86_64" ]; then \
 RUN mkdir -p /tmp/opencl-driver-intel && \
+    # mkdir -p /tmp/opencl-driver-intel && \
     cd /tmp/opencl-driver-intel && \
     wget https://github.com/intel/llvm/releases/download/2024-WW14/oclcpuexp-2024.17.3.0.09_rel.tar.gz && \
     wget https://github.com/oneapi-src/oneTBB/releases/download/v2021.12.0/oneapi-tbb-2021.12.0-lin.tgz && \
@@ -54,6 +57,7 @@ RUN mkdir -p /tmp/opencl-driver-intel && \
     ldconfig -f /etc/ld.so.conf.d/libintelopenclexp.conf && \
     cd / && \
     rm -rf /tmp/opencl-driver-intel
+#     fi
 
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
