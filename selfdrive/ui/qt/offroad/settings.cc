@@ -87,6 +87,14 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
     // insert longitudinal personality after NDOG toggle
     if (param == "DisengageOnAccelerator") {
       addItem(long_personality_setting);
+      
+      // Add stop distance setting
+      std::vector<QString> stop_distance_texts{tr("6m"), tr("8m"), tr("10m"), tr("12m"), tr("14m")};
+      auto stop_distance_setting = new ButtonParamControl("StopDistance", tr("Stop Distance"),
+                                              tr("Distance to keep from the lead car when stopped. Default is 6m."),
+                                              "../assets/offroad/icon_road.png",
+                                              stop_distance_texts);
+      addItem(stop_distance_setting);
     }
   }
 

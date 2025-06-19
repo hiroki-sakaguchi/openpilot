@@ -6,6 +6,7 @@ from cereal import log
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.params import Params
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
@@ -57,6 +58,20 @@ COMFORT_BRAKE = 2.5
 STOP_DISTANCE = 6.0
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
+
+# Get stop distance from params
+params = Params()
+stop_distance_param = params.get("StopDistance")
+if stop_distance_param is not None:
+  # Map button index to actual distance: 0->4m, 1->5m, 2->6m (default), 3->7m, 4->8m
+  try:
+    button_idx = int(stop_distance_param)
+    STOP_DISTANCE = 4.0 + button_idx
+  except (ValueError, TypeError):
+    STOP_DISTANCE = 6.0
+else:
+  # Default to 6m if not set
+  STOP_DISTANCE = 6.0
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
