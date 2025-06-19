@@ -87,7 +87,7 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
     // insert longitudinal personality after NDOG toggle
     if (param == "DisengageOnAccelerator") {
       addItem(long_personality_setting);
-      
+
       // Add stop distance setting
       std::vector<QString> stop_distance_texts{tr("6m"), tr("8m"), tr("10m"), tr("12m"), tr("14m")};
       auto stop_distance_setting = new ButtonParamControl("StopDistance", tr("Stop Distance"),
@@ -95,6 +95,37 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
                                               "../assets/offroad/icon_road.png",
                                               stop_distance_texts);
       addItem(stop_distance_setting);
+
+      // --- TEMPORARY DEBUG --- show actual runtime distance in meters
+      stop_distance_value = new LabelControl(tr("Current Stop Distance"), "");
+      addItem(stop_distance_value);
+      // initialize once
+      const auto updateStopDistanceLabel = [this]() {
+        Params p;
+        int idx_ui = atoi(p.get("StopDistance").c_str());
+        int idx_rt = atoi(p.get("StopDistanceRuntime").c_str());
+        int meters_ui = 6 + idx_ui * 2;
+        bool mismatch = idx_ui != idx_rt;
+
+        QString text = QString("%1 m").arg(meters_ui);
+        if (mismatch) {
+          text += tr("  (reboot required)");
+          if (stop_distance_value) {
+            stop_distance_value->setStyleSheet("color: red;");
+          }
+        } else if (stop_distance_value) {
+          stop_distance_value->setStyleSheet("");
+        }
+
+        if (stop_distance_value) {
+          stop_distance_value->setText(text);
+        }
+      };
+      updateStopDistanceLabel();
+      QObject::connect(uiState(), &UIState::uiUpdate, this, [updateStopDistanceLabel]() {
+        updateStopDistanceLabel();
+      });
+      // --- END TEMPORARY DEBUG ---
     }
   }
 
@@ -334,7 +365,7 @@ void SettingsWindow::setCurrentPanel(int index, const QString &param) {
     if (param.endsWith("Panel")) {
       QString panelName = param;
       panelName.chop(5); // Remove "Panel" suffix
-      
+
       // Find the panel by name
       for (int i = 0; i < nav_btns->buttons().size(); i++) {
         if (nav_btns->buttons()[i]->text() == tr(panelName.toStdString().c_str())) {
@@ -346,7 +377,7 @@ void SettingsWindow::setCurrentPanel(int index, const QString &param) {
       emit expandToggleDescription(param);
     }
   }
-  
+
   panel_widget->setCurrentIndex(index);
   nav_btns->buttons()[index]->setChecked(true);
 }

@@ -76,9 +76,17 @@ if __name__ != '__main__':
         STOP_DISTANCE = 6.0 + (button_idx * 2.0)
       except (ValueError, TypeError):
         STOP_DISTANCE = 6.0
+    try:
+      params.put("StopDistanceRuntime", str(int((STOP_DISTANCE - 6.0) / 2.0)))
+    except Exception:
+      pass
   except Exception:
     # If params fails to initialize, use default
     STOP_DISTANCE = 6.0
+    try:
+      params.put("StopDistanceRuntime", "0")
+    except Exception:
+      pass
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
