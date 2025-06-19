@@ -14,7 +14,12 @@ from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
 if __name__ == '__main__':  # generating code
   from openpilot.third_party.acados.acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 else:
-  from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
+  try:
+    from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
+  except (ImportError, AttributeError) as _import_err:
+    # We will lazily build the solver later in LongitudinalMpc.__init__
+    AcadosOcpSolverCython = None
+    _ACADOS_IMPORT_ERR = _import_err
 
 from casadi import SX, vertcat
 
@@ -27,7 +32,7 @@ SOURCES = ['lead0', 'lead1', 'cruise', 'e2e']
 
 X_DIM = 3
 U_DIM = 1
-PARAM_DIM = 6
+PARAM_DIM = 7
 COST_E_DIM = 5
 COST_DIM = COST_E_DIM + 1
 CONSTR_DIM = 4
@@ -55,7 +60,7 @@ T_IDXS = np.array(T_IDXS_LST)
 FCW_IDXS = T_IDXS < 5.0
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 COMFORT_BRAKE = 2.5
-STOP_DISTANCE = 6.0
+STOP_DISTANCE = 6.0  # default, may be overridden at runtime via Params
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
 
@@ -135,7 +140,8 @@ def gen_long_model():
   prev_a = SX.sym('prev_a')
   lead_t_follow = SX.sym('lead_t_follow')
   lead_danger_factor = SX.sym('lead_danger_factor')
-  model.p = vertcat(a_min, a_max, x_obstacle, prev_a, lead_t_follow, lead_danger_factor)
+  stop_distance_param = SX.sym('stop_distance')
+  model.p = vertcat(a_min, a_max, x_obstacle, prev_a, lead_t_follow, lead_danger_factor, stop_distance_param)
 
   # dynamics model
   f_expl = vertcat(v_ego, a_ego, j_ego)
@@ -171,11 +177,12 @@ def gen_long_ocp():
   prev_a = ocp.model.p[3]
   lead_t_follow = ocp.model.p[4]
   lead_danger_factor = ocp.model.p[5]
+  stop_distance_param = ocp.model.p[6]
 
   ocp.cost.yref = np.zeros((COST_DIM, ))
   ocp.cost.yref_e = np.zeros((COST_E_DIM, ))
 
-  desired_dist_comfort = get_safe_obstacle_distance(v_ego, lead_t_follow)
+  desired_dist_comfort = ((v_ego**2) / (2 * COMFORT_BRAKE)) + (lead_t_follow * v_ego) + stop_distance_param
 
   # The main cost in normal operation is how close you are to the "desired" distance
   # from an obstacle at every timestep. This obstacle can be a lead car
@@ -201,7 +208,7 @@ def gen_long_ocp():
 
   x0 = np.zeros(X_DIM)
   ocp.constraints.x0 = x0
-  ocp.parameter_values = np.array([-1.2, 1.2, 0.0, 0.0, get_T_FOLLOW(), LEAD_DANGER_FACTOR])
+  ocp.parameter_values = np.array([-1.2, 1.2, 0.0, 0.0, get_T_FOLLOW(), LEAD_DANGER_FACTOR, STOP_DISTANCE])
 
 
   # We put all constraint cost weights to 0 and only set them at runtime
@@ -242,14 +249,27 @@ class LongitudinalMpc:
   def __init__(self, mode='acc', dt=DT_MDL):
     self.mode = mode
     self.dt = dt
+
+    # Lazy-build acados solver if import failed earlier
+    global AcadosOcpSolverCython
+    if AcadosOcpSolverCython is None:
+      from openpilot.third_party.acados.acados_template import AcadosOcpSolver
+      import subprocess, importlib
+
+      ocp_tmp = gen_long_ocp()
+      AcadosOcpSolver.generate(ocp_tmp, json_file=JSON_FILE)
+      subprocess.run(["make", "-s"], cwd=EXPORT_DIR, check=True)
+
+      # Reload the freshly built module
+      AcadosOcpSolverCython = importlib.import_module(
+        'openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.c_generated_code.acados_ocp_solver_pyx').AcadosOcpSolverCython
+
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
     self.reset()
     self.source = SOURCES[2]
 
   def reset(self):
-    # self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
     self.solver.reset()
-    # self.solver.options_set('print_level', 2)
     self.v_solution = np.zeros(N+1)
     self.a_solution = np.zeros(N+1)
     self.prev_a = np.array(self.a_solution)
@@ -408,6 +428,7 @@ class LongitudinalMpc:
     self.params[:,2] = np.min(x_obstacles, axis=1)
     self.params[:,3] = np.copy(self.prev_a)
     self.params[:,4] = t_follow
+    self.params[:,6] = STOP_DISTANCE  # runtime stop distance
 
     self.run()
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
@@ -426,8 +447,6 @@ class LongitudinalMpc:
         self.source = 'lead1'
 
   def run(self):
-    # t0 = time.monotonic()
-    # reset = 0
     for i in range(N+1):
       self.solver.set(i, 'p', self.params[i])
     self.solver.constraints_set(0, "lbx", self.x0)
@@ -438,13 +457,6 @@ class LongitudinalMpc:
     self.time_qp_solution = float(self.solver.get_stats('time_qp')[0])
     self.time_linearization = float(self.solver.get_stats('time_lin')[0])
     self.time_integrator = float(self.solver.get_stats('time_sim')[0])
-
-    # qp_iter = self.solver.get_stats('statistics')[-1][-1] # SQP_RTI specific
-    # print(f"long_mpc timings: tot {self.solve_time:.2e}, qp {self.time_qp_solution:.2e}, lin {self.time_linearization:.2e}, \
-    # integrator {self.time_integrator:.2e}, qp_iter {qp_iter}")
-    # res = self.solver.get_residuals()
-    # print(f"long_mpc residuals: {res[0]:.2e}, {res[1]:.2e}, {res[2]:.2e}, {res[3]:.2e}")
-    # self.solver.print_statistics()
 
     for i in range(N+1):
       self.x_sol[i] = self.solver.get(i, 'x')
@@ -463,9 +475,6 @@ class LongitudinalMpc:
         self.last_cloudlog_t = t
         cloudlog.warning(f"Long mpc reset, solution_status: {self.solution_status}")
       self.reset()
-      # reset = 1
-    # print(f"long_mpc timings: total internal {self.solve_time:.2e}, external: {(time.monotonic() - t0):.2e} qp {self.time_qp_solution:.2e}, \
-    # lin {self.time_linearization:.2e} qp_iter {qp_iter}, reset {reset}")
 
 
 if __name__ == "__main__":
