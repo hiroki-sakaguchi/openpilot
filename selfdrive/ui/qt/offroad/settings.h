@@ -73,8 +73,6 @@ private:
   Params params;
   std::map<std::string, ParamControl*> toggles;
   ButtonParamControl *long_personality_setting;
-  // Temporary debug label to show runtime stop distance (can be removed later)
-  class LabelControl *stop_distance_value = nullptr;
 
   void updateToggles();
 };

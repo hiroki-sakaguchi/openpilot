@@ -95,37 +95,6 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
                                               "../assets/offroad/icon_road.png",
                                               stop_distance_texts);
       addItem(stop_distance_setting);
-
-      // --- TEMPORARY DEBUG --- show actual runtime distance in meters
-      stop_distance_value = new LabelControl(tr("Current Stop Distance"), "");
-      addItem(stop_distance_value);
-      // initialize once
-      const auto updateStopDistanceLabel = [this]() {
-        Params p;
-        int idx_ui = atoi(p.get("StopDistance").c_str());
-        int idx_rt = atoi(p.get("StopDistanceRuntime").c_str());
-        int meters_ui = 6 + idx_ui * 2;
-        bool mismatch = idx_ui != idx_rt;
-
-        QString text = QString("%1 m").arg(meters_ui);
-        if (mismatch) {
-          text += tr("  (reboot required)");
-          if (stop_distance_value) {
-            stop_distance_value->setStyleSheet("color: red;");
-          }
-        } else if (stop_distance_value) {
-          stop_distance_value->setStyleSheet("");
-        }
-
-        if (stop_distance_value) {
-          stop_distance_value->setText(text);
-        }
-      };
-      updateStopDistanceLabel();
-      QObject::connect(uiState(), &UIState::uiUpdate, this, [updateStopDistanceLabel]() {
-        updateStopDistanceLabel();
-      });
-      // --- END TEMPORARY DEBUG ---
     }
   }
 
