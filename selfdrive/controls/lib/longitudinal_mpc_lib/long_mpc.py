@@ -64,30 +64,6 @@ STOP_DISTANCE = 6.0  # default, may be overridden at runtime via Params
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
 
-# Get stop distance from params (only at runtime, not during code generation)
-if __name__ != '__main__':
-  try:
-    params = Params()
-    stop_distance_param = params.get("StopDistance")
-    if stop_distance_param is not None:
-      # Map button index to actual distance: 0->6m (default), 1->8m, 2->10m, 3->12m, 4->14m
-      try:
-        button_idx = int(stop_distance_param)
-        STOP_DISTANCE = 6.0 + (button_idx * 2.0)
-      except (ValueError, TypeError):
-        STOP_DISTANCE = 6.0
-    try:
-      params.put("StopDistanceRuntime", str(int((STOP_DISTANCE - 6.0) / 2.0)))
-    except Exception:
-      pass
-  except Exception:
-    # If params fails to initialize, use default
-    STOP_DISTANCE = 6.0
-    try:
-      params.put("StopDistanceRuntime", "0")
-    except Exception:
-      pass
-
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
     return 1.0
@@ -276,6 +252,16 @@ class LongitudinalMpc:
     self.reset()
     self.source = SOURCES[2]
 
+    # params interface for runtime adjustable variables (e.g., stop distance)
+    try:
+      self._params = Params()
+    except Exception:
+      self._params = None
+    self._last_stop_distance_idx = None  # cache to avoid redundant disk writes
+
+    # initialize stop distance once
+    self._update_stop_distance()
+
   def reset(self):
     self.solver.reset()
     self.v_solution = np.zeros(N+1)
@@ -373,6 +359,9 @@ class LongitudinalMpc:
     return lead_xv
 
   def update(self, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
+    # ----- runtime adjustable stop distance (update early) -----
+    self._update_stop_distance()
+
     t_follow = get_T_FOLLOW(personality)
     v_ego = self.x0[1]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -436,6 +425,7 @@ class LongitudinalMpc:
     self.params[:,2] = np.min(x_obstacles, axis=1)
     self.params[:,3] = np.copy(self.prev_a)
     self.params[:,4] = t_follow
+
     self.params[:,6] = STOP_DISTANCE  # runtime stop distance
 
     self.run()
@@ -483,6 +473,26 @@ class LongitudinalMpc:
         self.last_cloudlog_t = t
         cloudlog.warning(f"Long mpc reset, solution_status: {self.solution_status}")
       self.reset()
+
+  # -------- runtime adjustable stop distance handling ---------
+  def _update_stop_distance(self):
+    """Refresh STOP_DISTANCE from Params if it changed."""
+    global STOP_DISTANCE
+    if self._params is None:
+      return
+    try:
+      sd_raw = self._params.get("StopDistance")
+      if sd_raw is not None:
+        idx = int(sd_raw)
+        new_distance = 6.0 + (idx * 2.0)
+        if new_distance != STOP_DISTANCE:
+          STOP_DISTANCE = new_distance
+        if idx != self._last_stop_distance_idx:
+          self._params.put_nonblocking("StopDistanceRuntime", str(idx))
+          self._last_stop_distance_idx = idx
+    except Exception:
+      # ignore Param errors
+      pass
 
 
 if __name__ == "__main__":
