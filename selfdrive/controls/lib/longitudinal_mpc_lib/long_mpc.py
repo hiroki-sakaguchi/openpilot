@@ -483,8 +483,8 @@ class LongitudinalMpc:
     try:
       sd_raw = self._params.get("StopDistance")
       if sd_raw is not None:
-        idx = int(sd_raw)
-        new_distance = 6.0 + (idx * 2.0)
+        idx = max(0, min(2, int(sd_raw)))
+        new_distance = 6.0 + (idx * 2.0)  # 0->6m,1->8m,2->10m
         if new_distance != STOP_DISTANCE:
           STOP_DISTANCE = new_distance
         if idx != self._last_stop_distance_idx:
