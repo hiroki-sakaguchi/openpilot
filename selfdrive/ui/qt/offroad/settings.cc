@@ -84,6 +84,20 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
     addItem(toggle);
     toggles[param.toStdString()] = toggle;
 
+    // Insert Auto Experimental Mode toggle right after Experimental Mode
+    if (param == "ExperimentalMode") {
+      ParamControl *auto_exp_toggle = new ParamControl("AutoExperimentalMode", tr("Auto Experimental Mode"),
+                                         tr("Automatically enable Experimental Mode when gas gating is detected at speeds below 55 km/h. "
+                                            "Experimental Mode will be disabled when speed exceeds 55 km/h or when accelerator is pressed."),
+                                         "../assets/offroad/icon_shell.png", this);
+      auto_exp_toggle->setVisible(false);
+      addItem(auto_exp_toggle);
+      toggles["AutoExperimentalMode"] = auto_exp_toggle;
+
+      // When Experimental Mode is toggled, refresh visibility dynamically
+      QObject::connect(toggle, &ParamControl::toggleFlipped, this, [=](bool){ updateToggles(); });
+    }
+
     // insert longitudinal personality after NDOG toggle
     if (param == "DisengageOnAccelerator") {
       addItem(long_personality_setting);
@@ -102,21 +116,8 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   toggles["ExperimentalMode"]->setActiveIcon("../assets/img_experimental.svg");
   toggles["ExperimentalMode"]->setConfirmation(true, true);
 
-  // Auto Experimental Mode toggle (initially hidden)
-  auto auto_exp_toggle = new ParamControl("AutoExperimentalMode", tr("Auto Experimental Mode"),
-                                         tr("Automatically enable Experimental Mode when gas gating is detected at speeds below 55 km/h. "
-                                            "Experimental Mode will be disabled when speed exceeds 55 km/h or when accelerator is pressed."),
-                                         "../assets/offroad/icon_shell.png", this);
-  auto_exp_toggle->setVisible(false);  // Initially hidden
-  addItem(auto_exp_toggle);
-  toggles["AutoExperimentalMode"] = auto_exp_toggle;
-
-  // Update visibility immediately based on current param value
+  // Update visibility initially (auto_exp_toggle may be nullptr if not created yet, but updateToggles handles this)
   updateToggles();
-
-  // When Experimental Mode is toggled, refresh visibility dynamically
-  QObject::connect(toggles["ExperimentalMode"], &ParamControl::toggleFlipped,
-                   this, [=](bool){ updateToggles(); });
 }
 
 void TogglesPanel::updateState(const UIState &s) {
