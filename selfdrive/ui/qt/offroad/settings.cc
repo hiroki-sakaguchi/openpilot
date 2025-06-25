@@ -110,6 +110,13 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   auto_exp_toggle->setVisible(false);  // Initially hidden
   addItem(auto_exp_toggle);
   toggles["AutoExperimentalMode"] = auto_exp_toggle;
+
+  // Update visibility immediately based on current param value
+  updateToggles();
+
+  // When Experimental Mode is toggled, refresh visibility dynamically
+  QObject::connect(toggles["ExperimentalMode"], &ParamControl::toggleFlipped,
+                   this, [=](bool){ updateToggles(); });
 }
 
 void TogglesPanel::updateState(const UIState &s) {
@@ -135,11 +142,11 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 void TogglesPanel::updateToggles() {
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
   auto auto_exp_toggle = toggles["AutoExperimentalMode"];
-  
+
   // Show/hide Auto Experimental Mode based on Experimental Mode state
   bool exp_mode_enabled = params.getBool("ExperimentalMode");
   auto_exp_toggle->setVisible(exp_mode_enabled);
-  
+
   // If Experimental Mode is turned off, also turn off Auto Experimental Mode
   if (!exp_mode_enabled && params.getBool("AutoExperimentalMode")) {
     params.putBool("AutoExperimentalMode", false);
