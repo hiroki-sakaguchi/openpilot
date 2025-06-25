@@ -101,6 +101,15 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   // Toggles with confirmation dialogs
   toggles["ExperimentalMode"]->setActiveIcon("../assets/img_experimental.svg");
   toggles["ExperimentalMode"]->setConfirmation(true, true);
+
+  // Auto Experimental Mode toggle (initially hidden)
+  auto auto_exp_toggle = new ParamControl("AutoExperimentalMode", tr("Auto Experimental Mode"),
+                                         tr("Automatically enable Experimental Mode when gas gating is detected at speeds below 55 km/h. "
+                                            "Experimental Mode will be disabled when speed exceeds 55 km/h or when accelerator is pressed."),
+                                         "../assets/offroad/icon_shell.png", this);
+  auto_exp_toggle->setVisible(false);  // Initially hidden
+  addItem(auto_exp_toggle);
+  toggles["AutoExperimentalMode"] = auto_exp_toggle;
 }
 
 void TogglesPanel::updateState(const UIState &s) {
@@ -125,6 +134,16 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 
 void TogglesPanel::updateToggles() {
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
+  auto auto_exp_toggle = toggles["AutoExperimentalMode"];
+  
+  // Show/hide Auto Experimental Mode based on Experimental Mode state
+  bool exp_mode_enabled = params.getBool("ExperimentalMode");
+  auto_exp_toggle->setVisible(exp_mode_enabled);
+  
+  // If Experimental Mode is turned off, also turn off Auto Experimental Mode
+  if (!exp_mode_enabled && params.getBool("AutoExperimentalMode")) {
+    params.putBool("AutoExperimentalMode", false);
+  }
   const QString e2e_description = QString("%1<br>"
                                           "<h4>%2</h4><br>"
                                           "%3<br>"

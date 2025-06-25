@@ -33,6 +33,9 @@ class Controls:
     self.CP = messaging.log_from_bytes(self.params.get("CarParams", block=True), car.CarParams)
     cloudlog.info("controlsd got CarParams")
 
+    # Auto Experimental Mode state
+    self.auto_experimental_mode_enabled = False  # current Auto Experimental Mode toggle value
+
     self.CI = interfaces[self.CP.carFingerprint](self.CP)
 
     self.sm = messaging.SubMaster(['liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
@@ -66,6 +69,26 @@ class Controls:
 
   def state_control(self):
     CS = self.sm['carState']
+
+    # Auto Experimental Mode logic
+    self.auto_experimental_mode_enabled = self.params.getBool("AutoExperimentalMode")
+    if self.auto_experimental_mode_enabled:
+      long_plan = self.sm['longitudinalPlan']
+      v_ego_kmh = CS.vEgo * CV.MS_TO_KPH
+      gas_pressed = CS.gasPressed
+
+      # Determine if gas gating is active (openpilot is suppressing throttle)
+      gas_gating_active = not long_plan.allowThrottle
+
+      exp_mode_enabled = self.params.getBool("ExperimentalMode")
+
+      # Auto ON: all conditions must be met
+      if (v_ego_kmh <= 55.0) and gas_gating_active and not gas_pressed and not exp_mode_enabled:
+        self.params.putBool("ExperimentalMode", True)
+
+      # Auto OFF: any of the conditions met
+      elif exp_mode_enabled and (v_ego_kmh > 55.0 or gas_pressed):
+        self.params.putBool("ExperimentalMode", False)
 
     # Update VehicleModel
     lp = self.sm['liveParameters']
