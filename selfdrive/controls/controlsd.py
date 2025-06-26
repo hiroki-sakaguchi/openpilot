@@ -34,7 +34,10 @@ class Controls:
     cloudlog.info("controlsd got CarParams")
 
     # Auto Experimental Mode state
-    self.auto_experimental_mode_enabled = False  # current Auto Experimental Mode toggle value
+    self.auto_experimental_mode_enabled = False  # current Auto Experimental Mode toggle value cached
+    self._exp_mode_enabled_cached = False
+    self._frame_cnt = 0
+    self._params_cache_interval = 100  # refresh every 100 control frames (~1s)
 
     self.CI = interfaces[self.CP.carFingerprint](self.CP)
 
@@ -70,27 +73,33 @@ class Controls:
   def state_control(self):
     CS = self.sm['carState']
 
+    # Increment frame counter
+    self._frame_cnt += 1
+
+    # Refresh cached Params periodically to avoid frequent disk/mmap lookups in real-time loop
+    if self._frame_cnt % self._params_cache_interval == 0:
+      self.auto_experimental_mode_enabled = self.params.getBool("AutoExperimentalMode")
+      self._exp_mode_enabled_cached = self.params.getBool("ExperimentalMode")
+
     # Auto Experimental Mode logic
-    self.auto_experimental_mode_enabled = self.params.getBool("AutoExperimentalMode")
-    if self.auto_experimental_mode_enabled:
-      long_plan = self.sm['longitudinalPlan']
-      v_ego_kmh = CS.vEgo * CV.MS_TO_KPH
-      gas_pressed = CS.gasPressed
+    long_plan = self.sm['longitudinalPlan']
+    v_ego_kmh = CS.vEgo * CV.MS_TO_KPH
+    gas_pressed = CS.gasPressed
 
-      # Determine if gas gating is active (openpilot is suppressing throttle)
-      gas_gating_active = not long_plan.allowThrottle
+    # Determine if gas gating is active (openpilot is suppressing throttle)
+    gas_gating_active = not long_plan.allowThrottle
 
-      exp_mode_enabled = self.params.getBool("ExperimentalMode")
+    exp_mode_enabled = self._exp_mode_enabled_cached
 
-      # Auto ON: all conditions must be met
-      if (v_ego_kmh <= 55.0) and gas_gating_active and not gas_pressed and not exp_mode_enabled:
-        # Use non-blocking write to avoid realtime loop delays
-        self.params.put_bool_nonblocking("ExperimentalMode", True)
+    # Auto ON: all conditions must be met
+    if (v_ego_kmh <= 55.0) and gas_gating_active and not gas_pressed and not exp_mode_enabled:
+      # Use non-blocking write to avoid realtime loop delays
+      self.params.put_bool_nonblocking("ExperimentalMode", True)
 
-      # Auto OFF: any of the conditions met
-      elif exp_mode_enabled and (v_ego_kmh > 55.0 or gas_pressed):
-        # Use non-blocking write to avoid realtime loop delays
-        self.params.put_bool_nonblocking("ExperimentalMode", False)
+    # Auto OFF: any of the conditions met
+    elif exp_mode_enabled and (v_ego_kmh > 55.0 or gas_pressed):
+      # Use non-blocking write to avoid realtime loop delays
+      self.params.put_bool_nonblocking("ExperimentalMode", False)
 
     # Update VehicleModel
     lp = self.sm['liveParameters']
