@@ -84,11 +84,13 @@ class Controls:
 
       # Auto ON: all conditions must be met
       if (v_ego_kmh <= 55.0) and gas_gating_active and not gas_pressed and not exp_mode_enabled:
-        self.params.putBool("ExperimentalMode", True)
+        # Use non-blocking write to avoid realtime loop delays
+        self.params.put_bool_nonblocking("ExperimentalMode", True)
 
       # Auto OFF: any of the conditions met
       elif exp_mode_enabled and (v_ego_kmh > 55.0 or gas_pressed):
-        self.params.putBool("ExperimentalMode", False)
+        # Use non-blocking write to avoid realtime loop delays
+        self.params.put_bool_nonblocking("ExperimentalMode", False)
 
     # Update VehicleModel
     lp = self.sm['liveParameters']
