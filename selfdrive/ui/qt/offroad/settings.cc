@@ -13,6 +13,7 @@
 #include "selfdrive/ui/qt/qt_window.h"
 #include "selfdrive/ui/qt/widgets/prime.h"
 #include "selfdrive/ui/qt/widgets/scrollview.h"
+#include "selfdrive/ui/qt/widgets/input.h"
 #include "selfdrive/ui/qt/offroad/developer_panel.h"
 #include "selfdrive/ui/qt/offroad/firehose.h"
 
@@ -129,8 +130,10 @@ void TogglesPanel::updateToggles() {
   // Check if experimental mode toggle was requested via cruise control inputs
   if (params.getBool("ExperimentalModeToggleRequested")) {
     params.remove("ExperimentalModeToggleRequested");
-    // Trigger the toggle click which will show confirmation dialog if needed
-    experimental_mode_toggle->toggleClicked(true);
+    // Simulate toggle click to use existing confirmation logic
+    bool current_mode = params.getBool("ExperimentalMode");
+    experimental_mode_toggle->toggle.setChecked(!current_mode);
+    experimental_mode_toggle->toggle.clicked();
   }
   
   const QString e2e_description = QString("%1<br>"
