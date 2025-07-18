@@ -125,6 +125,14 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 
 void TogglesPanel::updateToggles() {
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
+  
+  // Check if experimental mode toggle was requested via cruise control inputs
+  if (params.getBool("ExperimentalModeToggleRequested")) {
+    params.remove("ExperimentalModeToggleRequested");
+    // Trigger the toggle click which will show confirmation dialog if needed
+    experimental_mode_toggle->toggleClicked(true);
+  }
+  
   const QString e2e_description = QString("%1<br>"
                                           "<h4>%2</h4><br>"
                                           "%3<br>"

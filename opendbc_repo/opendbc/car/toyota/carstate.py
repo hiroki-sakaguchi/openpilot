@@ -45,6 +45,7 @@ class CarState(CarStateBase):
     self.angle_offset = FirstOrderFilter(None, 60.0, DT_CTRL, initialized=False)
 
     self.distance_button = 0
+    self.cruise_control_state = 0
 
     self.pcm_follow_distance = 0
 
@@ -190,6 +191,27 @@ class CarState(CarStateBase):
       self.distance_button = cp_acc.vl["ACC_CONTROL"]["DISTANCE"]
 
       ret.buttonEvents = create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
+
+    # Detect cruise control input events for all Toyota vehicles
+    prev_cruise_control_state = self.cruise_control_state
+    self.cruise_control_state = self.pcm_acc_status
+    
+    # Generate button events for cruise control inputs
+    # State 9 = speed up input (ACCEL/RESUME via lever or button)
+    # State 10 = speed down input (DECEL/SET via lever or button)
+    cruise_buttons = []
+    if prev_cruise_control_state != self.cruise_control_state:
+      if self.cruise_control_state == 9:
+        cruise_buttons.extend(create_button_events(1, 0, {1: ButtonType.accelCruise}))
+      elif self.cruise_control_state == 10:
+        cruise_buttons.extend(create_button_events(1, 0, {1: ButtonType.decelCruise}))
+    
+    # Merge button events
+    if cruise_buttons:
+      if not hasattr(ret, 'buttonEvents') or not ret.buttonEvents:
+        ret.buttonEvents = cruise_buttons
+      else:
+        ret.buttonEvents.extend(cruise_buttons)
 
     return ret
 

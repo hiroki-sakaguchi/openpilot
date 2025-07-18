@@ -18,6 +18,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, S
 from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
+from openpilot.selfdrive.controls.experimental_mode_toggle import ExperimentalModeToggle
 
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
@@ -48,6 +49,7 @@ class Controls:
 
     self.LoC = LongControl(self.CP)
     self.VM = VehicleModel(self.CP)
+    self.experimental_mode_toggle = ExperimentalModeToggle()
     self.LaC: LatControl
     if self.CP.steerControlType == car.CarParams.SteerControlType.angle:
       self.LaC = LatControlAngle(self.CP, self.CI)
@@ -63,6 +65,15 @@ class Controls:
     if self.sm.updated["livePose"]:
       device_pose = Pose.from_live_pose(self.sm['livePose'])
       self.calibrated_pose = self.pose_calibrator.build_calibrated_pose(device_pose)
+    
+    # Check for experimental mode toggle via cruise control inputs
+    if self.sm.updated["carState"]:
+      toggled = self.experimental_mode_toggle.update(self.sm['carState'])
+      if toggled:
+        cloudlog.info("Experimental mode toggled via cruise control inputs")
+      
+      # Check if confirmation dialog was completed
+      self.experimental_mode_toggle.check_confirmation_completed()
 
   def state_control(self):
     CS = self.sm['carState']
