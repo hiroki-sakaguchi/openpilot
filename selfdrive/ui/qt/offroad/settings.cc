@@ -126,16 +126,7 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 
 void TogglesPanel::updateToggles() {
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
-  
-  // Check if experimental mode toggle was requested via cruise control inputs
-  if (params.getBool("ExperimentalModeToggleRequested")) {
-    params.remove("ExperimentalModeToggleRequested");
-    // Simulate toggle click to use existing confirmation logic
-    bool current_mode = params.getBool("ExperimentalMode");
-    experimental_mode_toggle->toggle.setChecked(!current_mode);
-    experimental_mode_toggle->toggle.clicked();
-  }
-  
+
   const QString e2e_description = QString("%1<br>"
                                           "<h4>%2</h4><br>"
                                           "%3<br>"
@@ -148,6 +139,32 @@ void TogglesPanel::updateToggles() {
                                           "mistakes should be expected."))
                                   .arg(tr("New Driving Visualization"))
                                   .arg(tr("The driving visualization will transition to the road-facing wide-angle camera at low speeds to better show some turns. The Experimental mode logo will also be shown in the top right corner."));
+
+  // Check if experimental mode toggle was requested via cruise control inputs
+  if (params.getBool("ExperimentalModeToggleRequested")) {
+    params.remove("ExperimentalModeToggleRequested");
+    // Directly toggle the parameter to match existing UI behavior
+    bool current_mode = params.getBool("ExperimentalMode");
+
+    // If enabling for first time, respect confirmation requirement
+    if (!current_mode && !params.getBool("ExperimentalModeConfirmed")) {
+      // Show same confirmation as regular toggle would
+      QString content("<body><h2 style=\"text-align: center;\">" + tr("Experimental Mode") + "</h2><br>"
+                              "<p style=\"text-align: center; margin: 0 128px; font-size: 50px;\">" +
+                              tr("openpilot defaults to driving in <b>chill mode</b>. Experimental mode enables "
+                                 "<b>alpha-level features</b> that aren't ready for chill mode.") + "</p></body>");
+      if (ConfirmationDialog(content, tr("Enable"), tr("Cancel"), true, this).exec()) {
+        params.putBool("ExperimentalModeConfirmed", true);
+        params.putBool("ExperimentalMode", true);
+      }
+    } else {
+      // Toggle normally
+      params.putBool("ExperimentalMode", !current_mode);
+    }
+
+    // Update UI to reflect change
+    experimental_mode_toggle->refresh();
+  }
 
   const bool is_release = params.getBool("IsReleaseBranch");
   auto cp_bytes = params.get("CarParamsPersistent");
