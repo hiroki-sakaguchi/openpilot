@@ -7,13 +7,14 @@ from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
-from openpilot.selfdrive.modeld.constants import ModelConstants
+from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
+from openpilot.selfdrive.controls.lib.dec import DynamicExperimentalController
+from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_speed_error
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
-from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_speed_error
-from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
-from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.modeld.constants import ModelConstants
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
@@ -69,6 +70,7 @@ class LongitudinalPlanner:
   def __init__(self, CP, init_v=0.0, init_a=0.0, dt=DT_MDL):
     self.CP = CP
     self.mpc = LongitudinalMpc(dt=dt)
+    self.dec = DynamicExperimentalController(self.CP, self.mpc)
     self.fcw = False
     self.dt = dt
     self.allow_throttle = True
@@ -106,7 +108,14 @@ class LongitudinalPlanner:
     return x, v, a, j, throttle_prob
 
   def update(self, sm):
-    self.mpc.mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
+    # Update dynamic experimental controller before selecting the MPC mode.
+    self.dec.update(sm)
+
+    mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
+    if self.dec.active():
+      mode = self.dec.mode()
+
+    self.mpc.mode = mode
 
     if len(sm['carControl'].orientationNED) == 3:
       accel_coast = get_coast_accel(sm['carControl'].orientationNED[1])
