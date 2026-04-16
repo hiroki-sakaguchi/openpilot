@@ -2,6 +2,7 @@
 import os
 import time
 import threading
+import numpy as np
 
 import cereal.messaging as messaging
 
@@ -20,6 +21,7 @@ from openpilot.selfdrive.selfdrived.events import Events, ET
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.latcontrol import MIN_LATERAL_CONTROL_SPEED
+from openpilot.selfdrive.modeld.constants import ModelConstants
 
 from openpilot.system.version import get_build_metadata
 
@@ -39,6 +41,14 @@ ButtonType = car.CarState.ButtonEvent.Type
 SafetyModel = car.CarParams.SafetyModel
 
 IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
+
+DYNAMIC_EXPERIMENTAL_ENTER_SPEED = 18.0
+DYNAMIC_EXPERIMENTAL_EXIT_SPEED = 22.0
+DYNAMIC_EXPERIMENTAL_ENTER_FRAMES = int(0.5 / DT_CTRL)
+DYNAMIC_EXPERIMENTAL_EXIT_FRAMES = int(1.0 / DT_CTRL)
+DYNAMIC_EXPERIMENTAL_MAX_GAS_PRESS_PROB = 0.35
+DYNAMIC_EXPERIMENTAL_STOP_DISTANCE = 80.0
+DYNAMIC_EXPERIMENTAL_STOP_SPEED = 0.5
 
 
 class SelfdriveD:
@@ -94,6 +104,7 @@ class SelfdriveD:
       self.params.remove("ExperimentalLongitudinalEnabled")
     if not self.CP.openpilotLongitudinalControl:
       self.params.remove("ExperimentalMode")
+      self.params.remove("DynamicExperimentalMode")
 
     self.CS_prev = car.CarState.new_message()
     self.AM = AlertManager()
@@ -111,6 +122,11 @@ class SelfdriveD:
     self.logged_comm_issue = None
     self.not_running_prev = None
     self.experimental_mode = False
+    self.manual_experimental_mode = False
+    self.dynamic_experimental_mode = False
+    self.dynamic_experimental_active = False
+    self.dynamic_experimental_enable_counter = 0
+    self.dynamic_experimental_disable_counter = 0
     self.personality = self.read_personality_param()
     self.recalibrating_seen = False
     self.state_machine = StateMachine()
@@ -425,6 +441,62 @@ class SelfdriveD:
     self.AM.add_many(self.sm.frame, alerts)
     self.AM.process_alerts(self.sm.frame, clear_event_types)
 
+  def _dynamic_experimental_stop_predicted(self, CS):
+    model_msg = self.sm['modelV2']
+    if len(model_msg.position.x) != ModelConstants.IDX_N or len(model_msg.velocity.x) != ModelConstants.IDX_N:
+      return False
+
+    gas_press_probs = model_msg.meta.disengagePredictions.gasPressProbs
+    gas_press_prob = gas_press_probs[1] if len(gas_press_probs) > 1 else 1.0
+
+    model_2s_velocity = float(np.interp(2.0, ModelConstants.T_IDXS, model_msg.velocity.x))
+    model_4s_velocity = float(np.interp(4.0, ModelConstants.T_IDXS, model_msg.velocity.x))
+    model_4s_position = float(np.interp(4.0, ModelConstants.T_IDXS, model_msg.position.x))
+    near_stop_velocity = max(1.0, CS.vEgo * 0.7)
+
+    return (model_2s_velocity < near_stop_velocity and
+            model_4s_velocity < DYNAMIC_EXPERIMENTAL_STOP_SPEED and
+            model_4s_position < DYNAMIC_EXPERIMENTAL_STOP_DISTANCE and
+            gas_press_prob < DYNAMIC_EXPERIMENTAL_MAX_GAS_PRESS_PROB)
+
+  def update_experimental_mode(self, CS):
+    manual_experimental = self.manual_experimental_mode and self.CP.openpilotLongitudinalControl
+    dynamic_enabled = self.dynamic_experimental_mode and self.params.get_bool("ExperimentalModeConfirmed")
+    dynamic_allowed = dynamic_enabled and not manual_experimental and self.enabled and CS.cruiseState.enabled
+    low_speed = CS.vEgo <= DYNAMIC_EXPERIMENTAL_ENTER_SPEED
+    gas_gating_active = dynamic_allowed and low_speed and not self.sm['longitudinalPlan'].allowThrottle
+    stop_predicted = dynamic_allowed and low_speed and self._dynamic_experimental_stop_predicted(CS)
+    dynamic_entry_requested = gas_gating_active or stop_predicted
+    immediate_exit = manual_experimental or not dynamic_allowed or CS.gasPressed or CS.vEgo >= DYNAMIC_EXPERIMENTAL_EXIT_SPEED
+
+    if immediate_exit:
+      self.dynamic_experimental_active = False
+      self.dynamic_experimental_enable_counter = 0
+      self.dynamic_experimental_disable_counter = 0
+      self.experimental_mode = manual_experimental
+      return
+
+    if self.dynamic_experimental_active:
+      if gas_gating_active or stop_predicted or CS.standstill:
+        self.dynamic_experimental_disable_counter = 0
+      else:
+        self.dynamic_experimental_disable_counter += 1
+
+      if self.dynamic_experimental_disable_counter >= DYNAMIC_EXPERIMENTAL_EXIT_FRAMES:
+        self.dynamic_experimental_active = False
+        self.dynamic_experimental_disable_counter = 0
+    else:
+      self.dynamic_experimental_disable_counter = 0
+      self.dynamic_experimental_enable_counter = self.dynamic_experimental_enable_counter + 1 if dynamic_entry_requested else 0
+      if self.dynamic_experimental_enable_counter >= DYNAMIC_EXPERIMENTAL_ENTER_FRAMES:
+        self.dynamic_experimental_active = True
+        self.dynamic_experimental_enable_counter = 0
+
+    if not self.dynamic_experimental_active:
+      self.dynamic_experimental_enable_counter = 0 if not dynamic_entry_requested else self.dynamic_experimental_enable_counter
+
+    self.experimental_mode = manual_experimental or self.dynamic_experimental_active
+
   def publish_selfdriveState(self, CS):
     # selfdriveState
     ss_msg = messaging.new_message('selfdriveState')
@@ -460,6 +532,7 @@ class SelfdriveD:
     self.update_events(CS)
     if not self.CP.passive and self.initialized:
       self.enabled, self.active = self.state_machine.update(self.events)
+    self.update_experimental_mode(CS)
     self.update_alerts(CS)
 
     self.publish_selfdriveState(CS)
@@ -475,7 +548,8 @@ class SelfdriveD:
   def params_thread(self, evt):
     while not evt.is_set():
       self.is_metric = self.params.get_bool("IsMetric")
-      self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
+      self.manual_experimental_mode = self.params.get_bool("ExperimentalMode")
+      self.dynamic_experimental_mode = self.params.get_bool("DynamicExperimentalMode")
       self.personality = self.read_personality_param()
       time.sleep(0.1)
 

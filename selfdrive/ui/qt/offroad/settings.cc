@@ -32,6 +32,12 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       "../assets/img_experimental_white.svg",
     },
     {
+      "DynamicExperimentalMode",
+      tr("Dynamic Experimental Mode"),
+      "",
+      "../assets/img_experimental_white.svg",
+    },
+    {
       "DisengageOnAccelerator",
       tr("Disengage on Accelerator Pedal"),
       tr("When enabled, pressing the accelerator pedal will disengage openpilot."),
@@ -100,6 +106,8 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   // Toggles with confirmation dialogs
   toggles["ExperimentalMode"]->setActiveIcon("../assets/img_experimental.svg");
   toggles["ExperimentalMode"]->setConfirmation(true, true);
+  toggles["DynamicExperimentalMode"]->setActiveIcon("../assets/img_experimental.svg");
+  toggles["DynamicExperimentalMode"]->setConfirmation(true, true);
 }
 
 void TogglesPanel::updateState(const UIState &s) {
@@ -124,6 +132,7 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 
 void TogglesPanel::updateToggles() {
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
+  auto dynamic_experimental_mode_toggle = toggles["DynamicExperimentalMode"];
   const QString e2e_description = QString("%1<br>"
                                           "<h4>%2</h4><br>"
                                           "%3<br>"
@@ -136,6 +145,7 @@ void TogglesPanel::updateToggles() {
                                           "mistakes should be expected."))
                                   .arg(tr("New Driving Visualization"))
                                   .arg(tr("The driving visualization will transition to the road-facing wide-angle camera at low speeds to better show some turns. The Experimental mode logo will also be shown in the top right corner."));
+  const QString dynamic_e2e_description = tr("Automatically enters Experimental Mode at low speed when the driving model predicts a stop, and exits when you press the accelerator.");
 
   const bool is_release = params.getBool("IsReleaseBranch");
   auto cp_bytes = params.get("CarParamsPersistent");
@@ -148,12 +158,16 @@ void TogglesPanel::updateToggles() {
       // normal description and toggle
       experimental_mode_toggle->setEnabled(true);
       experimental_mode_toggle->setDescription(e2e_description);
+      dynamic_experimental_mode_toggle->setEnabled(true);
+      dynamic_experimental_mode_toggle->setDescription(dynamic_e2e_description);
       long_personality_setting->setEnabled(true);
     } else {
       // no long for now
       experimental_mode_toggle->setEnabled(false);
+      dynamic_experimental_mode_toggle->setEnabled(false);
       long_personality_setting->setEnabled(false);
       params.remove("ExperimentalMode");
+      params.remove("DynamicExperimentalMode");
 
       const QString unavailable = tr("Experimental mode is currently unavailable on this car since the car's stock ACC is used for longitudinal control.");
 
@@ -167,11 +181,14 @@ void TogglesPanel::updateToggles() {
         }
       }
       experimental_mode_toggle->setDescription("<b>" + long_desc + "</b><br><br>" + e2e_description);
+      dynamic_experimental_mode_toggle->setDescription("<b>" + long_desc + "</b><br><br>" + dynamic_e2e_description);
     }
 
     experimental_mode_toggle->refresh();
+    dynamic_experimental_mode_toggle->refresh();
   } else {
     experimental_mode_toggle->setDescription(e2e_description);
+    dynamic_experimental_mode_toggle->setDescription(dynamic_e2e_description);
   }
 }
 
