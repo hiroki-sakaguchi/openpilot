@@ -31,7 +31,6 @@ if [[ $(command -v brew) == "" ]]; then
 fi
 
 brew bundle --file=- <<-EOS
-brew "git-lfs"
 brew "zlib"
 brew "capnp"
 brew "coreutils"

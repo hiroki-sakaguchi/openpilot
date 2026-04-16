@@ -4,12 +4,13 @@ Aside from the ML models, most tools used for openpilot development are in this 
 
 Most development happens on normal Ubuntu workstations, and not in cars or directly on comma devices. See the [setup guide](../tools) for getting your PC setup for openpilot development.
 
+For a Mac plus comma device workflow, see [MAC_DEVICE_WORKFLOW.md](./MAC_DEVICE_WORKFLOW.md).
+
 ## Quick start
 
 ```bash
 # get the latest stuff
 git pull
-git lfs pull
 git submodule update --init --recursive
 
 # update dependencies

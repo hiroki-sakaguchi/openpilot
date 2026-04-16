@@ -1,5 +1,6 @@
 venv/
 .venv/
+.uv/
 .ci_cache
 .env
 .clang-format

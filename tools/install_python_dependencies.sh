@@ -8,19 +8,29 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 ROOT="$DIR"/../
 cd "$ROOT"
 
-if ! command -v "uv" > /dev/null 2>&1; then
-  echo "installing uv..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  UV_BIN="$HOME/.local/bin"
-  PATH="$UV_BIN:$PATH"
+UV_ROOT="$ROOT/.uv"
+UV_BIN_DIR="$UV_ROOT/bin"
+UV_BIN="$UV_BIN_DIR/uv"
+export UV_CACHE_DIR="$UV_ROOT/cache"
+export UV_PYTHON_INSTALL_DIR="$UV_ROOT/python"
+export UV_PYTHON_BIN_DIR="$UV_ROOT/python-bin"
+export UV_MANAGED_PYTHON=1
+
+if [[ ! -x "$UV_BIN" ]]; then
+  echo "installing uv locally..."
+  mkdir -p "$UV_BIN_DIR"
+  curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="$UV_BIN_DIR" sh
 fi
 
-echo "updating uv..."
-# ok to fail, can also fail due to installing with brew
-uv self update || true
+PATH="$UV_BIN_DIR:$PATH"
 
 echo "installing python packages..."
-uv sync --frozen --all-extras
+if [[ ! -x "$UV_PYTHON_BIN_DIR/python3.12" ]]; then
+  "$UV_BIN" python install 3.12
+fi
+# Default setup targets core development, build, lint, and tests.
+# Optional tools/docs extras can be installed later when needed.
+"$UV_BIN" sync --python 3.12 --frozen --extra dev --extra testing
 source .venv/bin/activate
 
 echo "PYTHONPATH=${PWD}" > "$ROOT"/.env

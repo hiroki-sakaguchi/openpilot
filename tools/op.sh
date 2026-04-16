@@ -93,14 +93,6 @@ function op_check_git() {
     echo -e " ↳ [${GREEN}✔${NC}] git found."
   fi
 
-  echo "Checking for git lfs files..."
-  if [[ $(file -b $OPENPILOT_ROOT/selfdrive/modeld/models/dmonitoring_model.onnx) == "data" ]]; then
-    echo -e " ↳ [${GREEN}✔${NC}] git lfs files found."
-  else
-    echo -e " ↳ [${RED}✗${NC}] git lfs files not found! Run 'git lfs pull'"
-    return 1
-  fi
-
   echo "Checking for git submodules..."
   for name in $(git config --file .gitmodules --get-regexp path | awk '{ print $2 }' | tr '\n' ' '); do
     if [[ -z $(ls $OPENPILOT_ROOT/$name) ]]; then
@@ -145,10 +137,15 @@ function op_check_os() {
 function op_check_python() {
   echo "Checking for compatible python version..."
   REQUIRED_PYTHON_VERSION=$(grep "requires-python" $OPENPILOT_ROOT/pyproject.toml)
-  INSTALLED_PYTHON_VERSION=$(python3 --version 2> /dev/null || true)
+  if [[ -x "$OPENPILOT_ROOT/.venv/bin/python3" ]]; then
+    PYTHON_BIN="$OPENPILOT_ROOT/.venv/bin/python3"
+  else
+    PYTHON_BIN="$(command -v python3 2> /dev/null || true)"
+  fi
+  INSTALLED_PYTHON_VERSION=$($PYTHON_BIN --version 2> /dev/null || true)
 
   if [[ -z $INSTALLED_PYTHON_VERSION ]]; then
-    echo -e " ↳ [${RED}✗${NC}] python3 not found on your system. You need python version satisfying $(echo $REQUIRED_PYTHON_VERSION | cut -d '=' -f2-) to continue!"
+    echo -e " ↳ [${RED}✗${NC}] No compatible project Python found. Run 'tools/op.sh setup' to create the local environment."
     loge "ERROR_PYTHON_NOT_FOUND"
     return 1
   else
@@ -229,16 +226,6 @@ function op_setup() {
   fi
   et="$(date +%s)"
   echo -e " ↳ [${GREEN}✔${NC}] Submodules installed successfully in $((et - st)) seconds."
-
-  echo "Pulling git lfs files..."
-  st="$(date +%s)"
-  if ! git lfs pull; then
-    echo -e " ↳ [${RED}✗${NC}] Pulling git lfs files failed!"
-    loge "ERROR_GIT_LFS"
-    return 1
-  fi
-  et="$(date +%s)"
-  echo -e " ↳ [${GREEN}✔${NC}] Files pulled successfully in $((et - st)) seconds."
 
   op_check
 }

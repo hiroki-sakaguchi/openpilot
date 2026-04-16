@@ -10,8 +10,6 @@ Most of openpilot should work natively on macOS. On Windows you can use WSL for 
 
 **1. Clone openpilot**
 
-NOTE: This repository uses Git LFS for large files. Ensure you have [Git LFS](https://git-lfs.com/) installed and set up before cloning or working with it.
-
 Either do a partial clone for faster download:
 ``` bash
 git clone --filter=blob:none --recurse-submodules --also-filter-submodules https://github.com/commaai/openpilot.git
@@ -29,20 +27,16 @@ cd openpilot
 tools/op.sh setup
 ```
 
-**3. Git LFS**
+This creates the project-local Python environment in `.venv/` and keeps uv-managed tooling under `.uv/`.
 
-``` bash
-git lfs pull
-```
-
-**4. Activate a python shell**
+**3. Activate a python shell**
 
 Activate a shell with the Python dependencies installed:
 ``` bash
 source .venv/bin/activate
 ```
 
-**5. Build openpilot**
+**4. Build openpilot**
 
 ``` bash
 scons -u -j$(nproc)
