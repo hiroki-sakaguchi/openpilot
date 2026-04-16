@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import math
+import time
+from collections import deque
 from typing import SupportsFloat
 
 from cereal import car, log
 import cereal.messaging as messaging
+from opendbc.car import structs
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process, Priority, Ratekeeper
@@ -22,8 +25,13 @@ from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
+ButtonType = structs.CarState.ButtonEvent.Type
 
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
+
+# Experimental mode toggle sequence: DOWN -> UP -> DOWN within 3 seconds
+EXPERIMENTAL_TOGGLE_SEQUENCE = [ButtonType.decelCruise, ButtonType.accelCruise, ButtonType.decelCruise]
+EXPERIMENTAL_TOGGLE_TIMEOUT = 3.0
 
 
 class Controls:
@@ -56,6 +64,8 @@ class Controls:
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI)
 
+    self.cruise_button_sequence = deque(maxlen=3)
+
   def update(self):
     self.sm.update(15)
     if self.sm.updated["liveCalibration"]:
@@ -63,6 +73,9 @@ class Controls:
     if self.sm.updated["livePose"]:
       device_pose = Pose.from_live_pose(self.sm['livePose'])
       self.calibrated_pose = self.pose_calibrator.build_calibrated_pose(device_pose)
+
+    if self.sm.updated["carState"]:
+      self._check_experimental_mode_toggle()
 
   def state_control(self):
     CS = self.sm['carState']
@@ -203,6 +216,37 @@ class Controls:
     cc_send.valid = CS.canValid
     cc_send.carControl = CC
     self.pm.send('carControl', cc_send)
+
+  def _check_experimental_mode_toggle(self):
+    CS = self.sm['carState']
+
+    if not CS.cruiseState.enabled:
+      self.cruise_button_sequence.clear()
+      return
+
+    for event in CS.buttonEvents:
+      if event.pressed and event.type in [ButtonType.accelCruise, ButtonType.decelCruise]:
+        self.cruise_button_sequence.append((event.type, time.monotonic()))
+
+    if len(self.cruise_button_sequence) < 3:
+      return
+
+    button_types = [btn[0] for btn in self.cruise_button_sequence]
+    if button_types != EXPERIMENTAL_TOGGLE_SEQUENCE:
+      return
+
+    first_time = self.cruise_button_sequence[0][1]
+    last_time = self.cruise_button_sequence[2][1]
+    if last_time - first_time > EXPERIMENTAL_TOGGLE_TIMEOUT:
+      return
+
+    self.cruise_button_sequence.clear()
+
+    if self.params.get_bool("ExperimentalModeConfirmed"):
+      current_mode = self.params.get_bool("ExperimentalMode")
+      new_mode = not current_mode
+      self.params.put_bool("ExperimentalMode", new_mode)
+      cloudlog.info(f"Experimental mode toggled via cruise control: {current_mode} -> {new_mode}")
 
   def run(self):
     rk = Ratekeeper(100, print_delay_threshold=None)
