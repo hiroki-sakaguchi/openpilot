@@ -46,7 +46,6 @@ DYNAMIC_EXPERIMENTAL_ENTER_SPEED = 18.0
 DYNAMIC_EXPERIMENTAL_EXIT_SPEED = 22.0
 DYNAMIC_EXPERIMENTAL_ENTER_FRAMES = int(0.5 / DT_CTRL)
 DYNAMIC_EXPERIMENTAL_EXIT_FRAMES = int(1.0 / DT_CTRL)
-DYNAMIC_EXPERIMENTAL_MAX_GAS_PRESS_PROB = 0.35
 DYNAMIC_EXPERIMENTAL_STOP_DISTANCE = 80.0
 DYNAMIC_EXPERIMENTAL_STOP_SPEED = 0.5
 
@@ -446,9 +445,6 @@ class SelfdriveD:
     if len(model_msg.position.x) != ModelConstants.IDX_N or len(model_msg.velocity.x) != ModelConstants.IDX_N:
       return False
 
-    gas_press_probs = model_msg.meta.disengagePredictions.gasPressProbs
-    gas_press_prob = gas_press_probs[1] if len(gas_press_probs) > 1 else 1.0
-
     model_2s_velocity = float(np.interp(2.0, ModelConstants.T_IDXS, model_msg.velocity.x))
     model_4s_velocity = float(np.interp(4.0, ModelConstants.T_IDXS, model_msg.velocity.x))
     model_4s_position = float(np.interp(4.0, ModelConstants.T_IDXS, model_msg.position.x))
@@ -456,17 +452,15 @@ class SelfdriveD:
 
     return (model_2s_velocity < near_stop_velocity and
             model_4s_velocity < DYNAMIC_EXPERIMENTAL_STOP_SPEED and
-            model_4s_position < DYNAMIC_EXPERIMENTAL_STOP_DISTANCE and
-            gas_press_prob < DYNAMIC_EXPERIMENTAL_MAX_GAS_PRESS_PROB)
+            model_4s_position < DYNAMIC_EXPERIMENTAL_STOP_DISTANCE)
 
   def update_experimental_mode(self, CS):
     manual_experimental = self.manual_experimental_mode and self.CP.openpilotLongitudinalControl
     dynamic_enabled = self.dynamic_experimental_mode and self.params.get_bool("ExperimentalModeConfirmed")
     dynamic_allowed = dynamic_enabled and not manual_experimental and self.enabled and CS.cruiseState.enabled
     low_speed = CS.vEgo <= DYNAMIC_EXPERIMENTAL_ENTER_SPEED
-    gas_gating_active = dynamic_allowed and low_speed and not self.sm['longitudinalPlan'].allowThrottle
     stop_predicted = dynamic_allowed and low_speed and self._dynamic_experimental_stop_predicted(CS)
-    dynamic_entry_requested = gas_gating_active or stop_predicted
+    dynamic_entry_requested = stop_predicted
     immediate_exit = manual_experimental or not dynamic_allowed or CS.gasPressed or CS.vEgo >= DYNAMIC_EXPERIMENTAL_EXIT_SPEED
 
     if immediate_exit:
@@ -477,7 +471,7 @@ class SelfdriveD:
       return
 
     if self.dynamic_experimental_active:
-      if gas_gating_active or stop_predicted or CS.standstill:
+      if stop_predicted or CS.standstill:
         self.dynamic_experimental_disable_counter = 0
       else:
         self.dynamic_experimental_disable_counter += 1
