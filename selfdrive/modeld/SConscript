@@ -1,4 +1,5 @@
 import glob
+import os
 
 Import('env', 'envCython', 'arch', 'cereal', 'messaging', 'common', 'gpucommon', 'visionipc', 'transformations')
 lenv = env.Clone()
@@ -32,17 +33,19 @@ lenvCython.Program('models/commonmodel_pyx.so', 'models/commonmodel_pyx.pyx', LI
 tinygrad_files = ["#"+x for x in glob.glob(env.Dir("#tinygrad_repo").relpath + "/**", recursive=True, root_dir=env.Dir("#").abspath) if 'pycache' not in x]
 
 if arch != 'Darwin':
-  # Mac development uses the checked-in model artifacts. Re-generating them is
-  # not required for normal app/control development and currently breaks local
-  # builds because release3 mixes pre-generated tinygrad outputs with missing
-  # ONNX sources.
+  # release3 mixes checked-in tinygrad/metadata artifacts with missing ONNX
+  # sources for some driving models. Only regenerate artifacts when the ONNX
+  # source actually exists; otherwise keep using the tracked files as-is.
 
   # Get model metadata
   for model_name in ['driving_vision', 'driving_policy']:
     fn = File(f"models/{model_name}").abspath
+    onnx_path = fn + ".onnx"
+    if not os.path.exists(onnx_path):
+      continue
     script_files = [File(Dir("#selfdrive/modeld").File("get_model_metadata.py").abspath)]
-    cmd = f'python3 {Dir("#selfdrive/modeld").abspath}/get_model_metadata.py {fn}.onnx'
-    lenv.Command(fn + "_metadata.pkl", [fn + ".onnx"] + tinygrad_files + script_files, cmd)
+    cmd = f'python3 {Dir("#selfdrive/modeld").abspath}/get_model_metadata.py {onnx_path}'
+    lenv.Command(fn + "_metadata.pkl", [onnx_path] + tinygrad_files + script_files, cmd)
 
   # Compile tinygrad model
   pythonpath_string = 'PYTHONPATH="${PYTHONPATH}:' + env.Dir("#tinygrad_repo").abspath + '"'
@@ -53,5 +56,8 @@ if arch != 'Darwin':
 
   for model_name in ['driving_vision', 'driving_policy', 'dmonitoring_model']:
     fn = File(f"models/{model_name}").abspath
-    cmd = f'{pythonpath_string} {device_string} python3 {Dir("#tinygrad_repo").abspath}/examples/openpilot/compile3.py {fn}.onnx {fn}_tinygrad.pkl'
-    lenv.Command(fn + "_tinygrad.pkl", [fn + ".onnx"] + tinygrad_files, cmd)
+    onnx_path = fn + ".onnx"
+    if not os.path.exists(onnx_path):
+      continue
+    cmd = f'{pythonpath_string} {device_string} python3 {Dir("#tinygrad_repo").abspath}/examples/openpilot/compile3.py {onnx_path} {fn}_tinygrad.pkl'
+    lenv.Command(fn + "_tinygrad.pkl", [onnx_path] + tinygrad_files, cmd)
