@@ -8,6 +8,7 @@ from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.mici.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.lane_position import LanePosition
+from openpilot.selfdrive.ui.mici.onroad.status_icons import StatusIcons
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
 from openpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
@@ -150,6 +151,7 @@ class AugmentedRoadView(CameraView):
     self._model_renderer = ModelRenderer()
     self._hud_renderer = HudRenderer()
     self._lane_position = LanePosition()
+    self._status_icons = StatusIcons()
     self._alert_renderer = AlertRenderer()
     self._driver_state_renderer = DriverStateRenderer()
     self._confidence_ball = ConfidenceBall()
@@ -233,6 +235,7 @@ class AugmentedRoadView(CameraView):
     self._alert_renderer.render(self._content_rect)
     if alert_to_render is None:
       self._lane_position.render(self._content_rect)
+      self._status_icons.render(self._content_rect)
     self._hud_renderer.render(self._content_rect)
 
     # Draw fake rounded border

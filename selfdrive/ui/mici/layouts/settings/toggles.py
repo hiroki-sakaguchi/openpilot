@@ -28,6 +28,7 @@ class TogglesLayoutMici(NavScroller):
     # where the road camera is mounted, relative to the car's centerline
     self._camera_offset_btn = BigCycleParamButton("camera offset", "CameraOffset", [camera_offset_label(o) for o in CAMERA_OFFSETS])
     show_lane_position_toggle = BigParamControl("show lane position", "ShowLanePosition")
+    show_device_temp_toggle = BigParamControl("show device temperature", "ShowDeviceTemp")
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
@@ -42,6 +43,7 @@ class TogglesLayoutMici(NavScroller):
       self._experimental_btn,
       self._camera_offset_btn,
       show_lane_position_toggle,
+      show_device_temp_toggle,
       is_metric_toggle,
       ldw_toggle,
       always_on_dm_toggle,
@@ -54,6 +56,7 @@ class TogglesLayoutMici(NavScroller):
     self._refresh_toggles = (
       ("ExperimentalMode", self._experimental_btn),
       ("ShowLanePosition", show_lane_position_toggle),
+      ("ShowDeviceTemp", show_device_temp_toggle),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
