@@ -1,6 +1,7 @@
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.selfdrive.ui.mici.layouts.settings.network import WifiNetworkButton
 from openpilot.selfdrive.ui.mici.layouts.settings.network.wifi_ui import WifiUIMici
+from openpilot.selfdrive.ui.mici.layouts.settings.network.video_share import VideoShare, VideoShareDialog
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigMultiToggle, BigParamControl, BigToggle
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigInputDialog
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -46,6 +47,21 @@ class NetworkLayoutMici(NavScroller):
     self._tethering_password_btn = BigButton("tethering password", "", txt_tethering)
     self._tethering_password_btn.set_click_callback(tethering_password_clicked)
 
+    # ******** Share videos ********
+    self._video_share = VideoShare(self._wifi_manager)
+    self._video_share_dialog = VideoShareDialog(self._wifi_manager)
+
+    def share_videos_callback(checked: bool):
+      if checked:
+        self._video_share.start()
+        gui_app.push_widget(self._video_share_dialog)
+      else:
+        self._video_share.stop()
+
+    self._share_videos_btn = BigToggle("share videos", "", toggle_callback=share_videos_callback)
+    self._video_qr_btn = BigButton("video qr codes", "")
+    self._video_qr_btn.set_click_callback(lambda: gui_app.push_widget(self._video_share_dialog))
+
     # ******** Network Metered ********
     def network_metered_callback(value: str):
       self._network_metered_btn.set_enabled(False)
@@ -81,6 +97,8 @@ class NetworkLayoutMici(NavScroller):
       self._network_metered_btn,
       self._tethering_toggle_btn,
       self._tethering_password_btn,
+      self._share_videos_btn,
+      self._video_qr_btn,
       # /* Advanced settings
       self._roaming_btn,
       self._apn_btn,
@@ -97,6 +115,11 @@ class NetworkLayoutMici(NavScroller):
     self._roaming_btn.set_visible(show_cell_settings)
     self._apn_btn.set_visible(show_cell_settings)
     self._cellular_metered_btn.set_visible(show_cell_settings)
+
+    # mediaserverd turns sharing off by itself
+    share_videos = self._video_share.enabled
+    self._share_videos_btn.set_checked(share_videos)
+    self._video_qr_btn.set_visible(share_videos)
 
   def show_event(self):
     super().show_event()
