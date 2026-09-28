@@ -19,6 +19,7 @@ from opendbc.car.car_helpers import get_car, interfaces
 from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseHelper
+from openpilot.selfdrive.car.toyota_cruise_stalk import ToyotaCruiseStalk
 
 REPLAY = "REPLAY" in os.environ
 
@@ -150,6 +151,9 @@ class Car:
 
     self.v_cruise_helper = VCruiseHelper(self.CP)
 
+    # Toyota cruise stalk clicks are used to toggle experimental mode
+    self.toyota_cruise_stalk = ToyotaCruiseStalk() if self.CP.brand == 'toyota' and self.CP.openpilotLongitudinalControl else None
+
     self.is_metric = self.params.get_bool("IsMetric")
     self.experimental_mode = self.params.get_bool("ExperimentalMode")
 
@@ -164,6 +168,8 @@ class Car:
 
     # Update carState from CAN
     CS = self.CI.update(can_list)
+    if self.toyota_cruise_stalk is not None:
+      self.toyota_cruise_stalk.update(CS, self.CI.can_parsers)
 
     # Update radar tracks from CAN
     RD: structs.RadarDataT | None = self.RI.update(can_list)

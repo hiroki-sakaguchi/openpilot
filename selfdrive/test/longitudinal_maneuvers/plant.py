@@ -8,6 +8,7 @@ from openpilot.common.realtime import Ratekeeper, DT_MDL
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner
+from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import STOP_DISTANCE
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
 
 
@@ -15,7 +16,8 @@ class Plant:
   messaging_initialized = False
 
   def __init__(self, lead_relevancy=False, speed=0.0, distance_lead=2.0,
-               enabled=True, only_lead2=False, only_radar=False, e2e=False, personality=0, force_decel=False):
+               enabled=True, only_lead2=False, only_radar=False, e2e=False, personality=0, force_decel=False,
+               stop_distance=STOP_DISTANCE):
     self.rate = 1. / DT_MDL
 
     if not Plant.messaging_initialized:
@@ -52,6 +54,7 @@ class Plant:
     from opendbc.car.honda.interface import CarInterface
 
     self.planner = LongitudinalPlanner(CarInterface.get_non_essential_params(CAR.HONDA_CIVIC), init_v=self.speed)
+    self.planner.stop_distance = stop_distance
 
   @property
   def current_time(self):

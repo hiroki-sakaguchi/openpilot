@@ -1020,6 +1020,14 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.WARNING: personality_changed_alert,
   },
 
+  EventName.experimentalModeOn: {
+    ET.WARNING: NormalPermanentAlert("Experimental Mode", duration=1.5),
+  },
+
+  EventName.experimentalModeOff: {
+    ET.WARNING: NormalPermanentAlert("Chill Mode", duration=1.5),
+  },
+
   EventName.userBookmark: {
     ET.PERMANENT: NormalPermanentAlert("Bookmark Saved", duration=1.5),
   },
