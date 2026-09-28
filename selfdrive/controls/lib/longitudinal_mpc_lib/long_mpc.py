@@ -55,6 +55,8 @@ FCW_IDXS = T_IDXS < 5.0
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 COMFORT_BRAKE = 2.5
 STOP_DISTANCE = 6.0
+# Selectable distances to a stopped lead, indexed by the StopDistance param
+STOP_DISTANCES = (STOP_DISTANCE, 8.0, 10.0)
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
 MIN_X_LEAD_FACTOR = 0.5
@@ -79,6 +81,11 @@ def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
     return 1.25
   else:
     raise NotImplementedError("Longitudinal personality not supported")
+
+def get_stop_distance(stop_distance_idx):
+  if stop_distance_idx is None or not 0 <= stop_distance_idx < len(STOP_DISTANCES):
+    return STOP_DISTANCE
+  return STOP_DISTANCES[stop_distance_idx]
 
 def get_stopped_equivalence_factor(v_lead):
   return (v_lead**2) / (2 * COMFORT_BRAKE)
@@ -290,10 +297,10 @@ class LongitudinalMpc:
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
 
-  def process_lead(self, lead):
+  def process_lead(self, lead, stop_distance_offset=0.0):
     v_ego = self.x0[1]
     if lead is not None and lead.status:
-      x_lead = lead.dRel
+      x_lead = lead.dRel - stop_distance_offset
       v_lead = lead.vLead
       a_lead = lead.aLeadK
       a_lead_tau = lead.aLeadTau
@@ -313,19 +320,25 @@ class LongitudinalMpc:
     lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau)
     return lead_xv
 
-  def update(self, radarstate, v_cruise, personality=log.LongitudinalPersonality.standard):
+  def update(self, radarstate, v_cruise, personality=log.LongitudinalPersonality.standard, stop_distance=STOP_DISTANCE):
     t_follow = get_T_FOLLOW(personality)
     v_ego = self.x0[1]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
+    # FCW is checked against the real lead position
     lead_xv_0 = self.process_lead(radarstate.leadOne)
-    lead_xv_1 = self.process_lead(radarstate.leadTwo)
+
+    # To keep a larger distance than STOP_DISTANCE, treat the leads as that much closer.
+    # The shift is applied before the braking distance clip in process_lead.
+    stop_distance_offset = max(stop_distance - STOP_DISTANCE, 0.0)
+    mpc_lead_xv_0 = self.process_lead(radarstate.leadOne, stop_distance_offset)
+    mpc_lead_xv_1 = self.process_lead(radarstate.leadTwo, stop_distance_offset)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
     # and then treat that as a stopped car/obstacle at this new distance.
-    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1])
-    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1])
+    lead_0_obstacle = mpc_lead_xv_0[:,0] + get_stopped_equivalence_factor(mpc_lead_xv_0[:,1])
+    lead_1_obstacle = mpc_lead_xv_1[:,0] + get_stopped_equivalence_factor(mpc_lead_xv_1[:,1])
 
     # Fake an obstacle for cruise, this ensures smooth acceleration to set speed
     # when the leads are no factor.
