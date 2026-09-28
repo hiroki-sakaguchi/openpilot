@@ -1,12 +1,18 @@
 from cereal import log
 
 from openpilot.system.ui.widgets.scroller import NavScroller
-from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle
+from openpilot.selfdrive.modeld.camera_offset import CAMERA_OFFSETS
+from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigCycleParamButton
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callback
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
+
+
+def camera_offset_label(camera_offset: float) -> str:
+  cm = round(abs(camera_offset) * 100)
+  return "center" if cm == 0 else f"{cm} cm {'left' if camera_offset > 0 else 'right'}"
 
 
 class TogglesLayoutMici(NavScroller):
@@ -17,6 +23,9 @@ class TogglesLayoutMici(NavScroller):
     # options follow STOP_DISTANCES in long_mpc.py
     self._stop_distance_toggle = BigMultiParamToggle("stop distance", "StopDistance", ["6 m", "8 m", "10 m"])
     self._experimental_btn = BigParamControl("experimental mode", "ExperimentalMode")
+    # where the road camera is mounted, relative to the car's centerline
+    self._camera_offset_btn = BigCycleParamButton("camera offset", "CameraOffset", [camera_offset_label(o) for o in CAMERA_OFFSETS])
+    show_lane_position_toggle = BigParamControl("show lane position", "ShowLanePosition")
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
@@ -28,6 +37,8 @@ class TogglesLayoutMici(NavScroller):
       self._personality_toggle,
       self._stop_distance_toggle,
       self._experimental_btn,
+      self._camera_offset_btn,
+      show_lane_position_toggle,
       is_metric_toggle,
       ldw_toggle,
       always_on_dm_toggle,
@@ -39,6 +50,7 @@ class TogglesLayoutMici(NavScroller):
     # Toggle lists
     self._refresh_toggles = (
       ("ExperimentalMode", self._experimental_btn),
+      ("ShowLanePosition", show_lane_position_toggle),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
@@ -90,3 +102,4 @@ class TogglesLayoutMici(NavScroller):
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
       item.set_checked(ui_state.params.get_bool(key))
+    self._camera_offset_btn.refresh()

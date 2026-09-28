@@ -25,6 +25,8 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_pose_
 from openpilot.common.file_chunker import read_file_chunked, get_manifest_path
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import usbgpu_present, modeld_pkl_path, get_tg_input_devices
+from openpilot.selfdrive.modeld.camera_offset import CAMERA_OFFSET_RC, apply_camera_offset, get_camera_offset, get_v_horizon
+from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 
 
 PROCESS_NAME = "selfdrive.modeld.modeld"
@@ -33,6 +35,7 @@ SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
 MIN_LAT_CONTROL_SPEED = 0.3
+CAMERA_OFFSET_READ_INTERVAL = 20  # model frames, 1s
 
 
 
@@ -197,7 +200,16 @@ def main(demo=False):
 
   model_transform_main = np.zeros((3, 3), dtype=np.float32)
   model_transform_extra = np.zeros((3, 3), dtype=np.float32)
+  calib_transform_main = np.zeros((3, 3), dtype=np.float32)
+  calib_transform_extra = np.zeros((3, 3), dtype=np.float32)
+  v_horizon_main, v_horizon_extra = 0., 0.
+  calib_height = HEIGHT_INIT[0]
   live_calib_seen = False
+
+  # Changes to the camera offset are applied gradually, starting from the saved value
+  camera_offset_filter = FirstOrderFilter(get_camera_offset(params.get("CameraOffset", return_default=True)),
+                                          CAMERA_OFFSET_RC, 1. / ModelConstants.MODEL_RUN_FREQ)
+  camera_offset_target = camera_offset_filter.x
   buf_main, buf_extra = None, None
   meta_main = FrameMeta()
   meta_extra = FrameMeta()
@@ -258,9 +270,20 @@ def main(demo=False):
     if sm.updated["liveCalibration"] and sm.seen['roadCameraState'] and sm.seen['deviceState']:
       device_from_calib_euler = np.array(sm["liveCalibration"].rpyCalib, dtype=np.float32)
       dc = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['roadCameraState'].sensor))]
-      model_transform_main = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics if main_wide_camera else dc.fcam.intrinsics, False).astype(np.float32)
-      model_transform_extra = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics, True).astype(np.float32)
+      intrinsics_main = dc.ecam.intrinsics if main_wide_camera else dc.fcam.intrinsics
+      calib_transform_main = get_warp_matrix(device_from_calib_euler, intrinsics_main, False).astype(np.float32)
+      calib_transform_extra = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics, True).astype(np.float32)
+      v_horizon_main = get_v_horizon(intrinsics_main, device_from_calib_euler)
+      v_horizon_extra = get_v_horizon(dc.ecam.intrinsics, device_from_calib_euler)
+      calib_height = sm["liveCalibration"].height[0] if len(sm["liveCalibration"].height) else HEIGHT_INIT[0]
       live_calib_seen = True
+
+    # Compensate for a road camera mounted off the car's centerline
+    if run_count % CAMERA_OFFSET_READ_INTERVAL == 0:
+      camera_offset_target = get_camera_offset(params.get("CameraOffset", return_default=True))
+    camera_offset = camera_offset_filter.update(camera_offset_target)
+    model_transform_main = apply_camera_offset(calib_transform_main, camera_offset, calib_height, v_horizon_main)
+    model_transform_extra = apply_camera_offset(calib_transform_extra, camera_offset, calib_height, v_horizon_extra)
 
     traffic_convention = np.zeros(2)
     traffic_convention[int(is_rhd)] = 1
