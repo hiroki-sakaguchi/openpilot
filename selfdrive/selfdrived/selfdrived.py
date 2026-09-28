@@ -19,6 +19,7 @@ from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 from openpilot.selfdrive.selfdrived.events import Events, ET
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
+from openpilot.selfdrive.selfdrived.stalk_toggle import ExperimentalModeStalkToggle
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 
 from openpilot.system.version import get_build_metadata
@@ -120,6 +121,7 @@ class SelfdriveD:
     self.logged_comm_issue = None
     self.not_running_prev = None
     self.experimental_mode = False
+    self.experimental_mode_stalk_toggle = ExperimentalModeStalkToggle()
     self.personality = self.params.get("LongitudinalPersonality", return_default=True)
     self.recalibrating_seen = False
     self.dm_lockout_set = False
@@ -427,6 +429,12 @@ class SelfdriveD:
         self.personality = (self.personality - 1) % 3
         self.params.put('LongitudinalPersonality', self.personality)
         self.events.add(EventName.personalityChanged)
+
+      # Toggle experimental mode on cruise stalk down, up, down. params_thread picks up the new value
+      # Like the mici UI, this doesn't require ExperimentalModeConfirmed
+      if self.experimental_mode_stalk_toggle.update(CS):
+        self.params.put_bool("ExperimentalMode", not self.experimental_mode)
+        self.events.add(EventName.experimentalModeOff if self.experimental_mode else EventName.experimentalModeOn)
 
   def data_sample(self):
     _car_state = messaging.recv_one(self.car_state_sock)
