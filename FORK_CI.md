@@ -116,7 +116,7 @@ modeld に手を入れたときは、comma が公開している CI 用の走行
 | #2 | カメラのずれの補正、車線内の位置の表示 | process replay 以外はすべて成功 | 変更は modeld と UI だけで、どちらも process replay の対象外。modeld は手元で確認(下記)、UI は単体テストと手元での描画で確認 |
 | #3 | アクセルを抜くタイミングの設定(coast before stops) | process replay 以外はすべて成功。process replay のログは既知のダウンロード失敗だけ | plannerd は process replay の対象だが、この Fork の CI では動くとは限らない。代わりに、`LongitudinalPlanner` をシミュレーター(`Plant`)で動かすテストと、plannerd の設定値の読み込みを実際の Params で確認。plannerd 全体を走行ログに流す確認は、手順が未整備のため未実施 |
 | #4 | 動画共有(share videos:スマホ向けのサムネイル付きプレーヤー) | process replay 以外はすべて成功。process replay のログは既知のダウンロード失敗だけ。追加したテストは CI でも実行済み(エンコーダーが必要なものも含む) | 新しいプロセス mediaserverd は process replay の対象外。単体テスト(一覧・サムネイル・MP4 変換・配信・停止条件・アクセス制限、テザリングの連動)と、手元の mac でサーバーを起動してブラウザで再生・画質切り替え・次の区切りへの自動再生まで確認。comma four の実機(テザリング、スマホからの接続、デバイスの PyAV)では未確認 |
-| #5 | 走行画面の Experimental モードのアイコンと、デバイス温度の表示 | 確認中 | UI だけの変更で process replay の対象外。単体テスト(温度の文字列、熱の状態ごとの色)と、手元の mac で3つの状態を実際の画面サイズで描画して確認 |
+| #5 | 走行画面の Experimental モードのアイコンと、デバイス温度の表示 | process replay 以外はすべて成功(unit tests 983件、追加分2件を含む)。process replay のログは既知のダウンロード失敗だけ | UI だけの変更で process replay の対象外。単体テスト(温度の文字列、熱の状態ごとの色)と、手元の mac で3つの状態を実際の画面サイズで描画して確認 |
 
 ### PR #2:modeld の手元での確認(2026-09-28、macOS)
 `tools/fork/modeld_camera_offset_check.py` で確認した結果です。
