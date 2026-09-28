@@ -390,6 +390,30 @@ class BigMultiParamToggle(BigMultiToggle):
     self._params.put(self._param, new_idx)
 
 
+class BigCycleParamButton(BigButton):
+  """Cycles through options on each press and shows the selected one. Fits more options than BigMultiParamToggle"""
+  def __init__(self, text: str, param: str, options: list[str]):
+    assert len(options) > 0
+    super().__init__(text, options[0])
+    self._param = param
+    self._options = options
+    self._idx = 0
+
+    self._params = Params()
+    self.refresh()
+
+  def refresh(self):
+    idx = self._params.get(self._param, return_default=True)
+    self._idx = idx if idx is not None and 0 <= idx < len(self._options) else 0
+    self.set_value(self._options[self._idx])
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    super()._handle_mouse_release(mouse_pos)
+    self._idx = (self._idx + 1) % len(self._options)
+    self.set_value(self._options[self._idx])
+    self._params.put(self._param, self._idx)
+
+
 class BigParamControl(BigToggle):
   def __init__(self, text: str, param: str, toggle_callback: Callable | None = None):
     super().__init__(text, "", toggle_callback=toggle_callback)

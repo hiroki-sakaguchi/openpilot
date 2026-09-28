@@ -4,6 +4,7 @@ import pyray as rl
 from cereal import messaging, car
 from dataclasses import dataclass, field
 from openpilot.common.params import Params
+from openpilot.selfdrive.modeld.camera_offset import CAMERA_OFFSET_RC, get_camera_offset
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
@@ -60,6 +61,14 @@ class ModelRenderer(Widget):
     self._lead_vehicles = [LeadVehicle(), LeadVehicle()]
     self._path_offset_z = HEIGHT_INIT[0]
 
+    # The model outputs positions from the car's centerline when CameraOffset is set, but the road
+    # camera sees them from where it is mounted. Follows the offset like modeld does
+    self._params = Params()
+    self._camera_offset_filter = FirstOrderFilter(get_camera_offset(self._params.get("CameraOffset", return_default=True)),
+                                                  CAMERA_OFFSET_RC, 1 / gui_app.target_fps)
+    self._camera_offset_target = self._camera_offset_filter.x
+    self._frame = 0
+
     # Initialize ModelPoints objects
     self._path = ModelPoints()
     self._lane_lines = [ModelPoints() for _ in range(4)]
@@ -97,6 +106,11 @@ class ModelRenderer(Widget):
     sm = ui_state.sm
 
     self._torque_filter.update(-ui_state.sm['carOutput'].actuatorsOutput.torque)
+
+    if self._frame % gui_app.target_fps == 0:
+      self._camera_offset_target = get_camera_offset(self._params.get("CameraOffset", return_default=True))
+    self._camera_offset_filter.update(self._camera_offset_target)
+    self._frame += 1
 
     # Check if data is up-to-date
     if (sm.recv_frame["liveCalibration"] < ui_state.started_frame or
@@ -147,13 +161,14 @@ class ModelRenderer(Widget):
 
   def _update_raw_points(self, model):
     """Update raw 3D points from model data"""
-    self._path.raw_points = np.array([model.position.x, model.position.y, model.position.z], dtype=np.float32).T
+    camera_offset = self._camera_offset_filter.x
+    self._path.raw_points = np.array([model.position.x, np.array(model.position.y) + camera_offset, model.position.z], dtype=np.float32).T
 
     for i, lane_line in enumerate(model.laneLines):
-      self._lane_lines[i].raw_points = np.array([lane_line.x, lane_line.y, lane_line.z], dtype=np.float32).T
+      self._lane_lines[i].raw_points = np.array([lane_line.x, np.array(lane_line.y) + camera_offset, lane_line.z], dtype=np.float32).T
 
     for i, road_edge in enumerate(model.roadEdges):
-      self._road_edges[i].raw_points = np.array([road_edge.x, road_edge.y, road_edge.z], dtype=np.float32).T
+      self._road_edges[i].raw_points = np.array([road_edge.x, np.array(road_edge.y) + camera_offset, road_edge.z], dtype=np.float32).T
 
     self._lane_line_probs = np.array(model.laneLineProbs, dtype=np.float32)
     self._road_edge_stds = np.array(model.roadEdgeStds, dtype=np.float32)
@@ -171,7 +186,7 @@ class ModelRenderer(Widget):
 
         # Get z-coordinate from path at the lead vehicle position
         z = self._path.raw_points[idx, 2] if idx < len(self._path.raw_points) else 0.0
-        point = self._map_to_screen(d_rel, -y_rel, z + self._path_offset_z)
+        point = self._map_to_screen(d_rel, -y_rel + self._camera_offset_filter.x, z + self._path_offset_z)
         if point:
           self._lead_vehicles[i] = self._update_lead_vehicle(d_rel, v_rel, point, self._rect)
 
