@@ -169,7 +169,7 @@ class Car:
     # Update carState from CAN
     CS = self.CI.update(can_list)
     if self.toyota_cruise_stalk is not None:
-      CS.buttonEvents += self.toyota_cruise_stalk.update(self.CI.can_parsers)
+      self.toyota_cruise_stalk.update(CS, self.CI.can_parsers)
 
     # Update radar tracks from CAN
     RD: structs.RadarDataT | None = self.RI.update(can_list)
