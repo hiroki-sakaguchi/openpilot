@@ -4,11 +4,11 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.ldw import LaneDepartureWarning
-from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner
+from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner, get_allow_throttle_threshold
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import get_stop_distance
 import cereal.messaging as messaging
 
-STOP_DISTANCE_READ_INTERVAL = 5  # modelV2 frames, 4Hz
+PARAM_READ_INTERVAL = 5  # modelV2 frames, 4Hz
 
 
 def main():
@@ -29,9 +29,10 @@ def main():
   while True:
     sm.update()
     if sm.updated['modelV2']:
-      # Read the stop distance param while driving, so changes in the UI apply immediately
-      if model_frame % STOP_DISTANCE_READ_INTERVAL == 0:
+      # Read the params while driving, so changes in the UI apply immediately
+      if model_frame % PARAM_READ_INTERVAL == 0:
         longitudinal_planner.stop_distance = get_stop_distance(params.get("StopDistance", return_default=True))
+        longitudinal_planner.allow_throttle_threshold = get_allow_throttle_threshold(params.get("ThrottleGating", return_default=True))
       model_frame += 1
 
       longitudinal_planner.update(sm)
