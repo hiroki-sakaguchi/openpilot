@@ -22,6 +22,8 @@ class TogglesLayoutMici(NavScroller):
     self._personality_toggle = BigMultiParamToggle("driving personality", "LongitudinalPersonality", ["aggressive", "standard", "relaxed"])
     # options follow STOP_DISTANCES in long_mpc.py
     self._stop_distance_toggle = BigMultiParamToggle("stop distance", "StopDistance", ["6 m", "8 m", "10 m"])
+    # how early the throttle is stopped when the model expects a slowdown. Options follow ALLOW_THROTTLE_THRESHOLDS in longitudinal_planner.py
+    self._throttle_gating_toggle = BigMultiParamToggle("coast before stops", "ThrottleGating", ["stock", "early", "earlier"])
     self._experimental_btn = BigParamControl("experimental mode", "ExperimentalMode")
     # where the road camera is mounted, relative to the car's centerline
     self._camera_offset_btn = BigCycleParamButton("camera offset", "CameraOffset", [camera_offset_label(o) for o in CAMERA_OFFSETS])
@@ -36,6 +38,7 @@ class TogglesLayoutMici(NavScroller):
     self._scroller.add_widgets([
       self._personality_toggle,
       self._stop_distance_toggle,
+      self._throttle_gating_toggle,
       self._experimental_btn,
       self._camera_offset_btn,
       show_lane_position_toggle,
@@ -91,12 +94,14 @@ class TogglesLayoutMici(NavScroller):
         self._experimental_btn.set_visible(True)
         self._personality_toggle.set_visible(True)
         self._stop_distance_toggle.set_visible(True)
+        self._throttle_gating_toggle.set_visible(True)
       else:
         # no long for now
         self._experimental_btn.set_visible(False)
         self._experimental_btn.set_checked(False)
         self._personality_toggle.set_visible(False)
         self._stop_distance_toggle.set_visible(False)
+        self._throttle_gating_toggle.set_visible(False)
         ui_state.params.remove("ExperimentalMode")
 
     # Refresh toggles from params to mirror external changes

@@ -19,11 +19,19 @@ A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 ALLOW_THROTTLE_THRESHOLD = 0.4
+# Selectable thresholds, indexed by the ThrottleGating param. Higher ones stop the throttle earlier,
+# e.g. before red lights and traffic. 0.5 is what openpilot 0.9.8 used
+ALLOW_THROTTLE_THRESHOLDS = (ALLOW_THROTTLE_THRESHOLD, 0.5, 0.6)
 MIN_ALLOW_THROTTLE_SPEED = 2.5
 
 # Lookup table for turns
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
+
+def get_allow_throttle_threshold(throttle_gating_idx):
+  if throttle_gating_idx is None or not 0 <= throttle_gating_idx < len(ALLOW_THROTTLE_THRESHOLDS):
+    return ALLOW_THROTTLE_THRESHOLD
+  return ALLOW_THROTTLE_THRESHOLDS[throttle_gating_idx]
 
 def get_max_accel(v_ego):
   return np.interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
@@ -59,6 +67,7 @@ class LongitudinalPlanner:
     self.output_a_target = 0.0
     self.output_should_stop = False
     self.stop_distance = STOP_DISTANCE
+    self.allow_throttle_threshold = ALLOW_THROTTLE_THRESHOLD
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -119,7 +128,7 @@ class LongitudinalPlanner:
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
     _, _, _, _, throttle_prob = self.parse_model(sm['modelV2'])
     # Don't clip at low speeds since throttle_prob doesn't account for creep
-    self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
+    self.allow_throttle = throttle_prob > self.allow_throttle_threshold or v_ego <= MIN_ALLOW_THROTTLE_SPEED
 
     if not self.allow_throttle:
       clipped_accel_coast = max(accel_coast, accel_clip[0])
